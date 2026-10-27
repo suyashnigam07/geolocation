@@ -7,7 +7,9 @@ steps in a notification.
 ## Features
 
 - Today's step count, in big numbers
-- Step totals for the last 7 days
+- Progress ring towards a 10,000 step daily goal
+- Bar chart of the last 7 days with total, average and best day
+- Light and dark mode
 - Runs in the background all the time (foreground service with a small notification)
 - Starts again by itself after the phone restarts
 - Very low battery use: the step counting is done by the phone's hardware sensor
@@ -52,5 +54,6 @@ Every push to GitHub also builds the APK automatically (see
   app adds the difference between readings to today's total (handles reboots).
 - `BootReceiver` – restarts the service after a reboot or app update.
 - `MainActivity` – asks for permissions and shows the counts.
+- `StepRingView` / `BarChartView` – small custom views for the ring and the weekly chart.
 
 Counting starts when you first open the app; steps from before that are not included.

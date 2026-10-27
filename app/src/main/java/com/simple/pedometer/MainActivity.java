@@ -13,9 +13,9 @@ import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.View;
-import android.widget.Button;
 import android.widget.TextView;
 
+import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -25,14 +25,24 @@ import java.util.Locale;
 public class MainActivity extends Activity {
 
     private static final int REQUEST_PERMISSIONS = 1;
+    private static final int DAILY_GOAL = 10000;
+    private static final DateTimeFormatter HEADER_FORMAT =
+            DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault());
     private static final DateTimeFormatter DAY_FORMAT =
-            DateTimeFormatter.ofPattern("EEE dd MMM", Locale.getDefault());
+            DateTimeFormatter.ofPattern("EEE", Locale.getDefault());
 
     private StepStore store;
+    private final NumberFormat numberFormat = NumberFormat.getIntegerInstance();
+    private TextView date;
     private TextView stepsToday;
+    private TextView goal;
     private TextView status;
-    private TextView history;
-    private Button batteryButton;
+    private TextView weekTotal;
+    private TextView weekAverage;
+    private TextView weekBest;
+    private StepRingView ring;
+    private BarChartView chart;
+    private View batteryCard;
 
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener =
             (prefs, key) -> runOnUiThread(this::refresh);
@@ -42,11 +52,17 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         store = new StepStore(this);
+        date = findViewById(R.id.date);
         stepsToday = findViewById(R.id.steps_today);
+        goal = findViewById(R.id.goal);
         status = findViewById(R.id.status);
-        history = findViewById(R.id.history);
-        batteryButton = findViewById(R.id.battery_button);
-        batteryButton.setOnClickListener(v -> askToIgnoreBatteryOptimizations());
+        weekTotal = findViewById(R.id.week_total);
+        weekAverage = findViewById(R.id.week_average);
+        weekBest = findViewById(R.id.week_best);
+        ring = findViewById(R.id.ring);
+        chart = findViewById(R.id.chart);
+        batteryCard = findViewById(R.id.battery_card);
+        findViewById(R.id.battery_button).setOnClickListener(v -> askToIgnoreBatteryOptimizations());
 
         SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) == null) {
@@ -103,23 +119,38 @@ public class MainActivity extends Activity {
 
     private void startCounting() {
         StepService.start(this);
-        status.setText("Counting in the background. Keep walking!");
+        status.setText("\u25CF  Counting in the background");
     }
 
     private void refresh() {
-        stepsToday.setText(String.valueOf(store.getToday()));
-
-        StringBuilder sb = new StringBuilder();
         LocalDate today = LocalDate.now();
-        for (int i = 1; i <= 7; i++) {
-            LocalDate day = today.minusDays(i);
-            sb.append(String.format(Locale.getDefault(), "%-12s %8d%n",
-                    day.format(DAY_FORMAT), store.getSteps(day)));
+        int steps = store.getToday();
+        date.setText(today.format(HEADER_FORMAT));
+        stepsToday.setText(numberFormat.format(steps));
+        ring.setProgress((float) steps / DAILY_GOAL);
+        goal.setText(steps >= DAILY_GOAL
+                ? "Goal reached!"
+                : numberFormat.format(DAILY_GOAL - steps) + " to " + numberFormat.format(DAILY_GOAL));
+
+        // Last 7 days, oldest first, ending with today.
+        int[] values = new int[7];
+        String[] labels = new String[7];
+        int total = 0;
+        int best = 0;
+        for (int i = 0; i < 7; i++) {
+            LocalDate day = today.minusDays(6 - i);
+            values[i] = store.getSteps(day);
+            labels[i] = i == 6 ? "Today" : day.format(DAY_FORMAT);
+            total += values[i];
+            best = Math.max(best, values[i]);
         }
-        history.setText(sb.toString());
+        chart.setData(values, labels, DAILY_GOAL);
+        weekTotal.setText(numberFormat.format(total));
+        weekAverage.setText(numberFormat.format(total / 7));
+        weekBest.setText(numberFormat.format(best));
 
         PowerManager pm = getSystemService(PowerManager.class);
-        batteryButton.setVisibility(pm.isIgnoringBatteryOptimizations(getPackageName())
+        batteryCard.setVisibility(pm.isIgnoringBatteryOptimizations(getPackageName())
                 ? View.GONE : View.VISIBLE);
     }
 
