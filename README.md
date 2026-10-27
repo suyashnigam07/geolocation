@@ -40,6 +40,23 @@ time to see today's steps and the last 7 days.
 > If counting stops, set the app's battery setting to **Unrestricted** / enable
 > **Autostart** in the phone's Settings → Apps → Pedometer.
 
+## Street map for walks (Google Maps API key)
+
+Without a key, walks are drawn as a route outline. To show them on a Google street map:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project
+   and link a billing account (the Maps SDK for Android itself is free to use).
+2. Enable **Maps SDK for Android** (APIs & Services → Library).
+3. Create an API key (APIs & Services → Credentials → Create credentials → API key) and restrict it:
+   - Application restrictions → **Android apps** → add package `com.simple.pedometer`
+     with SHA-1 `5E:B3:79:BD:12:0F:0B:59:83:BD:34:F3:17:0B:41:68:9F:07:F0:CC`
+   - API restrictions → **Maps SDK for Android** only
+4. In this GitHub repository: Settings → Secrets and variables → Actions →
+   **New repository secret**, name `MAPS_API_KEY`, value = your key.
+5. Rebuild: Actions → Build APK → **Run workflow** (or push any change), then install the new APK.
+
+For a local build, put `MAPS_API_KEY=your-key` in `~/.gradle/gradle.properties`.
+
 ## Build it yourself
 
 Requires the Android SDK (or Android Studio).

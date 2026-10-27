@@ -17,9 +17,21 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapView;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.JointType;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolylineOptions;
+import com.google.android.gms.maps.model.RoundCap;
+
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -42,6 +54,13 @@ public class WalkActivity extends Activity {
     private Button button;
     private LinearLayout list;
     private Walk selected;
+
+    // Street map (only when a Google Maps API key was built in).
+    private final boolean useMap = !BuildConfig.MAPS_API_KEY.isEmpty();
+    private MapView mapView;
+    private GoogleMap map;
+    private Walk drawnWalk;
+    private int drawnPoints = -1;
     private boolean wasRecording;
 
     private final Runnable tick = new Runnable() {
@@ -66,6 +85,19 @@ public class WalkActivity extends Activity {
         message = findViewById(R.id.walk_message);
         button = findViewById(R.id.walk_button);
         list = findViewById(R.id.walk_list);
+        mapView = findViewById(R.id.map);
+        if (useMap) {
+            mapView.setVisibility(View.VISIBLE);
+            route.setVisibility(View.GONE);
+            mapView.onCreate(savedInstanceState == null ? null : savedInstanceState.getBundle("map"));
+            mapView.getMapAsync(googleMap -> {
+                map = googleMap;
+                map.getUiSettings().setMapToolbarEnabled(false);
+                enableMyLocation();
+                drawnPoints = -1;
+                update();
+            });
+        }
         button.setOnClickListener(v -> {
             if (WalkSession.isRecording()) {
                 WalkService.stop(this);
@@ -76,8 +108,43 @@ public class WalkActivity extends Activity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        if (useMap) mapView.onStart();
+    }
+
+    @Override
+    protected void onStop() {
+        if (useMap) mapView.onStop();
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (useMap) mapView.onDestroy();
+        super.onDestroy();
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        if (useMap) mapView.onLowMemory();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (useMap) {
+            Bundle mapState = new Bundle();
+            mapView.onSaveInstanceState(mapState);
+            outState.putBundle("map", mapState);
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        if (useMap) mapView.onResume();
         showHistory();
         handler.post(tick);
     }
@@ -85,6 +152,7 @@ public class WalkActivity extends Activity {
     @Override
     protected void onPause() {
         handler.removeCallbacks(tick);
+        if (useMap) mapView.onPause();
         super.onPause();
     }
 
@@ -111,6 +179,7 @@ public class WalkActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, results);
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
+            enableMyLocation();
             startWalk();
         } else {
             Toast.makeText(this, "Location permission is needed to record walks.",
@@ -153,8 +222,75 @@ public class WalkActivity extends Activity {
         distance.setText(walk == null ? "0 m" : Walk.distance(walk.distanceMeters));
         pace.setText(walk == null ? "--" : Walk.pace(elapsed, walk.distanceMeters));
         steps.setText(walk == null ? "0" : String.valueOf(walk.steps));
-        route.setRoute(walk == null ? null : walk.route,
-                recording ? "Waiting for GPS…" : "Tap Start walk to record a route");
+        if (useMap) {
+            drawOnMap(walk, recording);
+        } else {
+            route.setRoute(walk == null ? null : walk.route,
+                    recording ? "Waiting for GPS…" : "Tap Start walk to record a route");
+        }
+    }
+
+    /** Shows the blue "you are here" dot when location permission is granted. */
+    private void enableMyLocation() {
+        if (map == null || checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        try {
+            map.setMyLocationEnabled(true);
+        } catch (SecurityException e) {
+            // Permission was revoked meanwhile.
+        }
+    }
+
+    /** Draws the walk's route on the street map, redrawing only when it changed. */
+    private void drawOnMap(Walk walk, boolean recording) {
+        if (map == null) return;
+        int points = walk == null ? 0 : walk.route.size();
+        if (walk == drawnWalk && points == drawnPoints) return;
+        drawnWalk = walk;
+        drawnPoints = points;
+
+        map.clear();
+        if (points == 0) return;
+
+        List<LatLng> path = new ArrayList<>();
+        LatLngBounds.Builder bounds = new LatLngBounds.Builder();
+        for (double[] p : walk.route) {
+            LatLng point = new LatLng(p[0], p[1]);
+            path.add(point);
+            bounds.include(point);
+        }
+        float density = getResources().getDisplayMetrics().density;
+        map.addPolyline(new PolylineOptions()
+                .addAll(path)
+                .width(6 * density)
+                .color(getColor(R.color.accent))
+                .jointType(JointType.ROUND)
+                .startCap(new RoundCap())
+                .endCap(new RoundCap()));
+        LatLng start = path.get(0);
+        LatLng end = path.get(path.size() - 1);
+        map.addMarker(new MarkerOptions().position(start).title("Start")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+
+        if (recording) {
+            // Follow the walker.
+            map.animateCamera(CameraUpdateFactory.newLatLngZoom(end, 17));
+            return;
+        }
+        if (points > 1) {
+            map.addMarker(new MarkerOptions().position(end).title("Finish")
+                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
+        }
+        int width = mapView.getWidth();
+        int height = mapView.getHeight();
+        if (points > 1 && width > 0 && height > 0) {
+            map.moveCamera(CameraUpdateFactory.newLatLngBounds(
+                    bounds.build(), width, height, (int) (40 * density)));
+        } else {
+            map.moveCamera(CameraUpdateFactory.newLatLngZoom(start, 16));
+        }
     }
 
     private void showHistory() {

@@ -10,8 +10,19 @@ android {
         applicationId 'com.simple.pedometer'
         minSdk 26
         targetSdk 34
-        versionCode 6
-        versionName '1.5'
+        versionCode 7
+        versionName '1.6'
+
+        // Google Maps key: from the MAPS_API_KEY environment variable (a GitHub
+        // secret on CI) or gradle property. Without it the app draws walks
+        // without a street map.
+        def mapsKey = System.getenv('MAPS_API_KEY') ?: (project.findProperty('MAPS_API_KEY') ?: '')
+        manifestPlaceholders = [MAPS_API_KEY: mapsKey]
+        buildConfigField 'String', 'MAPS_API_KEY', "\"${mapsKey}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     signingConfigs {
@@ -35,4 +46,8 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation 'com.google.android.gms:play-services-maps:19.0.0'
 }

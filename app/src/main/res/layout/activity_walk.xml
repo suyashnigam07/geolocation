@@ -35,10 +35,25 @@
 
         <LinearLayout style="@style/Card">
 
-            <com.simple.pedometer.RouteView
-                android:id="@+id/route"
+            <com.simple.pedometer.MapContainer
                 android:layout_width="match_parent"
-                android:layout_height="220dp" />
+                android:layout_height="260dp"
+                android:background="@drawable/bg_card"
+                android:clipToOutline="true">
+
+                <!-- Street map, used when a Google Maps API key is set. -->
+                <com.google.android.gms.maps.MapView
+                    android:id="@+id/map"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
+                <!-- Plain route outline, used without a key. -->
+                <com.simple.pedometer.RouteView
+                    android:id="@+id/route"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </com.simple.pedometer.MapContainer>
 
             <TextView
                 android:id="@+id/walk_time"
