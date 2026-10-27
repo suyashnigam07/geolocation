@@ -2,6 +2,7 @@ package com.simple.pedometer;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.CameraAccessException;
@@ -37,10 +38,15 @@ public class PulseActivity extends Activity {
 
     private static final int REQUEST_CAMERA = 2;
     private static final double SETTLE_SECONDS = 2;
-    private static final double MEASURE_SECONDS = 20;
+    private static final double PULSE_SECONDS = 20;
+    private static final double RHYTHM_SECONDS = 60;
+    /** Start with this extra set to true for the 60-second heart rhythm check. */
+    static final String EXTRA_RHYTHM = "rhythm";
 
     private enum State { WAITING, MEASURING, DONE, FAILED }
 
+    private boolean rhythmMode;
+    private double measureSeconds;
     private HeartView heart;
     private TextView bpmText;
     private TextView message;
@@ -65,6 +71,15 @@ public class PulseActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_pulse);
+        rhythmMode = getIntent().getBooleanExtra(EXTRA_RHYTHM, false);
+        measureSeconds = rhythmMode ? RHYTHM_SECONDS : PULSE_SECONDS;
+        if (rhythmMode) {
+            ((TextView) findViewById(R.id.pulse_caption)).setText("Heart rhythm");
+            ((TextView) findViewById(R.id.pulse_title)).setText("Rhythm check");
+            ((TextView) findViewById(R.id.pulse_hint)).setText("Sit down and rest your fingertip lightly "
+                    + "over the back camera and flash. Keep still and breathe normally for 60 seconds. "
+                    + "This is not an ECG and cannot diagnose heart conditions.");
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         heart = findViewById(R.id.heart);
         bpmText = findViewById(R.id.bpm);
@@ -307,12 +322,14 @@ public class PulseActivity extends Activity {
             lastBeatTime = 0;
             runOnUiThread(() -> {
                 wave.clear();
-                message.setText("Measuring… keep your finger still.");
+                message.setText(rhythmMode
+                        ? "Measuring for 60 seconds… keep still and breathe normally."
+                        : "Measuring… keep your finger still.");
             });
         }
 
         double elapsed = (image.getTimestamp() - startNanos) / 1e9;
-        float progress = (float) (elapsed / (SETTLE_SECONDS + MEASURE_SECONDS));
+        float progress = (float) (elapsed / (SETTLE_SECONDS + measureSeconds));
         // Blood makes the image darker, so flip the sign: beats become peaks.
         float sample = (float) -brightness;
         if (elapsed < SETTLE_SECONDS) {
@@ -326,8 +343,10 @@ public class PulseActivity extends Activity {
         boolean newBeat = result.lastPeak > lastBeatTime;
         if (newBeat) lastBeatTime = result.lastPeak;
 
-        if (elapsed >= SETTLE_SECONDS + MEASURE_SECONDS) {
-            if (result.bpm > 0) {
+        if (elapsed >= SETTLE_SECONDS + measureSeconds) {
+            if (rhythmMode) {
+                finishRhythmCheck();
+            } else if (result.bpm > 0) {
                 state = State.DONE;
                 new PulseStore(this).save(result.bpm);
                 runOnUiThread(() -> {
@@ -348,6 +367,27 @@ public class PulseActivity extends Activity {
             wave.add(sample);
             if (result.bpm > 0) bpmText.setText(String.valueOf(result.bpm));
             if (newBeat) heart.beat();
+        });
+    }
+
+    /** Analyses the full 60-second recording, saves it and shows the result screen. */
+    private void finishRhythmCheck() {
+        PulseAnalysis.Beats beats = PulseAnalysis.detect(times, values);
+        PulseAnalysis.Rhythm rhythm = PulseAnalysis.rhythm(beats);
+        if (rhythm.status == PulseAnalysis.Rhythm.UNCLEAR) {
+            fail("The signal wasn't clear enough to check the rhythm. Sit still, rest your "
+                    + "finger lightly without pressing, and try again.");
+            return;
+        }
+        state = State.DONE;
+        new RhythmStore(this).add(RhythmRecord.from(times, beats, rhythm));
+        new PulseStore(this).save(rhythm.bpm);
+        runOnUiThread(() -> {
+            stopCamera();
+            // Reuse the results screen if the check was started from it.
+            startActivity(new Intent(this, RhythmActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+            finish();
         });
     }
 
@@ -386,60 +426,12 @@ public class PulseActivity extends Activity {
         double lastPeak;
     }
 
-    /**
-     * Finds heartbeats in the brightness signal: removes slow drift, smooths
-     * it, picks local peaks at least 0.3 s apart and turns the median time
-     * between peaks into beats per minute.
-     */
     static Result analyse(List<Double> t, List<Double> v) {
         Result result = new Result();
-        int n = t.size();
-        if (n < 30) return result;
-        double fps = (n - 1) / (t.get(n - 1) - t.get(0));
-        if (fps <= 0) return result;
-
-        double[] prefix = new double[n + 1];
-        for (int i = 0; i < n; i++) prefix[i + 1] = prefix[i] + v.get(i);
-
-        int trend = Math.max(3, (int) Math.round(fps * 1.0) / 2);
-        double[] detrended = new double[n];
-        for (int i = 0; i < n; i++) {
-            int a = Math.max(0, i - trend), b = Math.min(n, i + trend + 1);
-            detrended[i] = v.get(i) - (prefix[b] - prefix[a]) / (b - a);
-        }
-        double[] smooth = new double[n];
-        for (int i = 0; i < n; i++) {
-            int a = Math.max(0, i - 2), b = Math.min(n - 1, i + 2);
-            double s = 0;
-            for (int j = a; j <= b; j++) s += detrended[j];
-            smooth[i] = s / (b - a + 1);
-        }
-
-        int half = Math.max(2, (int) Math.round(fps * 0.25));
-        List<Double> peaks = new ArrayList<>();
-        for (int i = half; i < n - half; i++) {
-            if (smooth[i] <= 0) continue;
-            boolean isPeak = true;
-            for (int j = i - half; j <= i + half && isPeak; j++) {
-                if (smooth[j] > smooth[i]) isPeak = false;
-            }
-            if (!isPeak) continue;
-            double time = t.get(i);
-            if (!peaks.isEmpty() && time - peaks.get(peaks.size() - 1) < 0.3) continue;
-            peaks.add(time);
-        }
-        if (!peaks.isEmpty()) result.lastPeak = peaks.get(peaks.size() - 1);
-
-        List<Double> intervals = new ArrayList<>();
-        for (int i = 1; i < peaks.size(); i++) {
-            double d = peaks.get(i) - peaks.get(i - 1);
-            if (d >= 0.3 && d <= 1.5) intervals.add(d);
-        }
-        if (intervals.size() < 4) return result;
-        Collections.sort(intervals);
-        double median = intervals.get(intervals.size() / 2);
-        int bpm = (int) Math.round(60 / median);
-        if (bpm >= 40 && bpm <= 200) result.bpm = bpm;
+        PulseAnalysis.Beats beats = PulseAnalysis.detect(t, v);
+        if (beats == null) return result;
+        if (!beats.peakTime.isEmpty()) result.lastPeak = beats.peakTime.get(beats.peakTime.size() - 1);
+        result.bpm = PulseAnalysis.bpm(beats);
         return result;
     }
 }

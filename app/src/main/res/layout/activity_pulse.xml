@@ -14,6 +14,7 @@
         android:layout_height="wrap_content"
         android:fontFamily="sans-serif-medium"
         android:letterSpacing="0.08"
+        android:id="@+id/pulse_caption"
         android:text="Heart rate"
         android:textAllCaps="true"
         android:textColor="@color/text_secondary"
@@ -24,6 +25,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:fontFamily="sans-serif-medium"
+        android:id="@+id/pulse_title"
         android:text="Pulse rate"
         android:textColor="@color/text_primary"
         android:textSize="28sp" />
@@ -87,6 +89,7 @@
     </LinearLayout>
 
     <TextView
+        android:id="@+id/pulse_hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"

@@ -43,6 +43,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".RhythmActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <activity
             android:name=".WalkActivity"
             android:exported="false"
             android:launchMode="singleTop" />

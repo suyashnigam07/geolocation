@@ -62,6 +62,7 @@ public class MainActivity extends Activity {
     private TextView profile;
     private Switch reminderSwitch;
     private TextView walkSummary;
+    private TextView rhythmSummary;
     private PulseStore pulseStore;
     private HeartView pulseHeart;
     private TextView pulseValue;
@@ -86,6 +87,9 @@ public class MainActivity extends Activity {
         chart = findViewById(R.id.chart);
         batteryCard = findViewById(R.id.battery_card);
         findViewById(R.id.battery_button).setOnClickListener(v -> askToIgnoreBatteryOptimizations());
+        rhythmSummary = findViewById(R.id.rhythm_summary);
+        findViewById(R.id.rhythm_card).setOnClickListener(
+                v -> startActivity(new Intent(this, RhythmActivity.class)));
         walkSummary = findViewById(R.id.walk_summary);
         findViewById(R.id.walk_card).setOnClickListener(
                 v -> startActivity(new Intent(this, WalkActivity.class)));
@@ -213,6 +217,12 @@ public class MainActivity extends Activity {
         weekTotal.setText(numberFormat.format(total));
         weekAverage.setText(numberFormat.format(total / 7));
         weekBest.setText(numberFormat.format(best));
+
+        List<RhythmRecord> checks = new RhythmStore(this).getRecords();
+        rhythmSummary.setText(checks.isEmpty()
+                ? "60-second camera check of rhythm and HRV"
+                : "Last: " + checks.get(0).statusText() + " \u00B7 HRV " + checks.get(0).rmssdMs + " ms \u00B7 "
+                        + DateUtils.getRelativeTimeSpanString(checks.get(0).timeMillis));
 
         if (WalkSession.isRecording()) {
             walkSummary.setText("\u25CF  Walk in progress \u00B7 "
