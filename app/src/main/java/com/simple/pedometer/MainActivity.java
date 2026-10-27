@@ -74,6 +74,8 @@ public class MainActivity extends Activity {
         pulseTime = findViewById(R.id.pulse_time);
         findViewById(R.id.pulse_widget).setOnClickListener(
                 v -> startActivity(new Intent(this, PulseActivity.class)));
+        findViewById(R.id.sensors_card).setOnClickListener(
+                v -> startActivity(new Intent(this, SensorsActivity.class)));
 
         SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) == null) {

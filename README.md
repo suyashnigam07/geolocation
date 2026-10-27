@@ -10,6 +10,7 @@ steps in a notification.
 - Progress ring towards a 10,000 step daily goal
 - Bar chart of the last 7 days with total, average and best day
 - Light and dark mode
+- Phone sensors screen listing every sensor (with a Share button)
 - Pulse rate: tap the heart, cover the back camera and flash with your fingertip
   for ~20 seconds (an estimate, not a medical device)
 - Runs in the background all the time (foreground service with a small notification)

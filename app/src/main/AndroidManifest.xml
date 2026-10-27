@@ -34,6 +34,10 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <activity
+            android:name=".SensorsActivity"
+            android:exported="false" />
+
         <service
             android:name=".StepService"
             android:exported="false"
