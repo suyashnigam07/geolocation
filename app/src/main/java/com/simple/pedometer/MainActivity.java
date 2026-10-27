@@ -61,6 +61,7 @@ public class MainActivity extends Activity {
     private TextView speed;
     private TextView profile;
     private Switch reminderSwitch;
+    private TextView walkSummary;
     private PulseStore pulseStore;
     private HeartView pulseHeart;
     private TextView pulseValue;
@@ -85,6 +86,9 @@ public class MainActivity extends Activity {
         chart = findViewById(R.id.chart);
         batteryCard = findViewById(R.id.battery_card);
         findViewById(R.id.battery_button).setOnClickListener(v -> askToIgnoreBatteryOptimizations());
+        walkSummary = findViewById(R.id.walk_summary);
+        findViewById(R.id.walk_card).setOnClickListener(
+                v -> startActivity(new Intent(this, WalkActivity.class)));
         pulseStore = new PulseStore(this);
         pulseHeart = findViewById(R.id.pulse_heart);
         pulseValue = findViewById(R.id.pulse_value);
@@ -103,8 +107,6 @@ public class MainActivity extends Activity {
         reminderSwitch = findViewById(R.id.reminder_switch);
         reminderSwitch.setChecked(store.remindersEnabled());
         reminderSwitch.setOnCheckedChangeListener((b, checked) -> store.setRemindersEnabled(checked));
-        findViewById(R.id.sensors_card).setOnClickListener(
-                v -> startActivity(new Intent(this, SensorsActivity.class)));
 
         SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) == null) {
@@ -211,6 +213,18 @@ public class MainActivity extends Activity {
         weekTotal.setText(numberFormat.format(total));
         weekAverage.setText(numberFormat.format(total / 7));
         weekBest.setText(numberFormat.format(best));
+
+        if (WalkSession.isRecording()) {
+            walkSummary.setText("\u25CF  Walk in progress \u00B7 "
+                    + Walk.distance(WalkSession.current.distanceMeters));
+        } else {
+            List<Walk> walks = new WalkStore(this).getWalks();
+            walkSummary.setText(walks.isEmpty()
+                    ? "Track distance, time and route with GPS"
+                    : "Last: " + Walk.distance(walks.get(0).distanceMeters) + " \u00B7 "
+                            + Walk.duration(walks.get(0).durationMillis) + " \u00B7 "
+                            + DateUtils.getRelativeTimeSpanString(walks.get(0).startMillis));
+        }
 
         int bpm = pulseStore.getBpm();
         if (bpm > 0) {

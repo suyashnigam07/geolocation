@@ -12,8 +12,8 @@ steps in a notification.
 - Distance, calories and walking speed (based on your height and weight)
 - Active minutes (minutes with 60+ steps) towards a 30 minute daily goal
 - Hourly "time to move" reminder (10:00-21:00, under 250 steps in the past hour)
+- Walk recording with GPS: distance, duration, pace, steps and route outline, with history
 - Light and dark mode
-- Phone sensors screen listing every sensor (with a Share button)
 - Pulse rate: tap the heart, cover the back camera and flash with your fingertip
   for ~20 seconds (an estimate, not a medical device)
 - Runs in the background all the time (foreground service with a small notification)
@@ -58,6 +58,8 @@ Every push to GitHub also builds the APK automatically (see
   and updates the notification.
 - `StepStore` – saves steps per day. The sensor gives "steps since boot", so the
   app adds the difference between readings to today's total (handles reboots).
+- `WalkService` / `WalkActivity` – records a walk with GPS in a foreground service
+  (keeps going with the screen off) and lists past walks.
 - `MoveReminder` – hourly alarm that vibrates if you've been inactive.
 - `BootReceiver` – restarts the service after a reboot or app update.
 - `MainActivity` – asks for permissions and shows the counts.
