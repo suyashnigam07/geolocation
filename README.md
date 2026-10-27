@@ -10,6 +10,8 @@ steps in a notification.
 - Progress ring towards a 10,000 step daily goal
 - Bar chart of the last 7 days with total, average and best day
 - Light and dark mode
+- Pulse rate: tap the heart, cover the back camera and flash with your fingertip
+  for ~20 seconds (an estimate, not a medical device)
 - Runs in the background all the time (foreground service with a small notification)
 - Starts again by itself after the phone restarts
 - Very low battery use: the step counting is done by the phone's hardware sensor
@@ -54,6 +56,8 @@ Every push to GitHub also builds the APK automatically (see
   app adds the difference between readings to today's total (handles reboots).
 - `BootReceiver` – restarts the service after a reboot or app update.
 - `MainActivity` – asks for permissions and shows the counts.
-- `StepRingView` / `BarChartView` – small custom views for the ring and the weekly chart.
+- `PulseActivity` – measures the pulse from the camera: with the flash on, each
+  heartbeat slightly darkens the fingertip; the app counts those dips.
+- `StepRingView` / `BarChartView` / `HeartView` – small custom views for the ring and the weekly chart.
 
 Counting starts when you first open the app; steps from before that are not included.

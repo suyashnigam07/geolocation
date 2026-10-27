@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.format.DateUtils;
 import android.view.View;
 import android.widget.TextView;
 
@@ -43,6 +44,10 @@ public class MainActivity extends Activity {
     private StepRingView ring;
     private BarChartView chart;
     private View batteryCard;
+    private PulseStore pulseStore;
+    private HeartView pulseHeart;
+    private TextView pulseValue;
+    private TextView pulseTime;
 
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener =
             (prefs, key) -> runOnUiThread(this::refresh);
@@ -63,6 +68,12 @@ public class MainActivity extends Activity {
         chart = findViewById(R.id.chart);
         batteryCard = findViewById(R.id.battery_card);
         findViewById(R.id.battery_button).setOnClickListener(v -> askToIgnoreBatteryOptimizations());
+        pulseStore = new PulseStore(this);
+        pulseHeart = findViewById(R.id.pulse_heart);
+        pulseValue = findViewById(R.id.pulse_value);
+        pulseTime = findViewById(R.id.pulse_time);
+        findViewById(R.id.pulse_widget).setOnClickListener(
+                v -> startActivity(new Intent(this, PulseActivity.class)));
 
         SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) == null) {
@@ -148,6 +159,20 @@ public class MainActivity extends Activity {
         weekTotal.setText(numberFormat.format(total));
         weekAverage.setText(numberFormat.format(total / 7));
         weekBest.setText(numberFormat.format(best));
+
+        int bpm = pulseStore.getBpm();
+        if (bpm > 0) {
+            pulseValue.setText(String.valueOf(bpm));
+            pulseHeart.setProgress(1);
+            long ago = System.currentTimeMillis() - pulseStore.getTime();
+            pulseTime.setText(ago < DateUtils.MINUTE_IN_MILLIS ? "Just now"
+                    : DateUtils.getRelativeTimeSpanString(pulseStore.getTime(),
+                            System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
+        } else {
+            pulseValue.setText("--");
+            pulseHeart.setProgress(0);
+            pulseTime.setText("Tap to measure");
+        }
 
         PowerManager pm = getSystemService(PowerManager.class);
         batteryCard.setVisibility(pm.isIgnoringBatteryOptimizations(getPackageName())

@@ -10,4 +10,6 @@
     <color name="track">#2A3037</color>
     <color name="warning_soft">#3A2C14</color>
     <color name="warning">#FFC26B</color>
+    <color name="heart">#FF6369</color>
+    <color name="heart_soft">#3A1D1F</color>
 </resources>
