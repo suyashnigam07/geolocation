@@ -14,6 +14,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.SystemClock;
 
 /**
  * Foreground service that listens to the step counter sensor all the time and
@@ -60,14 +61,33 @@ public class StepService extends Service implements SensorEventListener {
                 return START_NOT_STICKY;
             }
             sensorManager.registerListener(this, stepCounter, SensorManager.SENSOR_DELAY_NORMAL);
+
+            // The step detector gives each step with its time, for active
+            // minutes and hourly totals. The wake-up version keeps working while
+            // the screen is off; events are batched for up to a minute to save battery.
+            Sensor detector = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR, true);
+            if (detector == null) {
+                detector = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+            }
+            if (detector != null) {
+                sensorManager.registerListener(this, detector,
+                        SensorManager.SENSOR_DELAY_NORMAL, 60_000_000);
+            }
             listening = true;
         }
+        MoveReminder.schedule(this);
         // Ask Android to restart the service if it ever gets killed.
         return START_STICKY;
     }
 
     @Override
     public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR) {
+            // Event time is in the elapsed-realtime clock; convert to wall-clock time.
+            long ageMillis = (SystemClock.elapsedRealtimeNanos() - event.timestamp) / 1_000_000;
+            store.onStepDetected(System.currentTimeMillis() - ageMillis);
+            return;
+        }
         int today = store.onCounterReading((long) event.values[0]);
         getSystemService(NotificationManager.class)
                 .notify(NOTIFICATION_ID, buildNotification(today));

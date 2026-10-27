@@ -12,4 +12,5 @@
     <color name="warning">#B26A00</color>
     <color name="heart">#E5484D</color>
     <color name="heart_soft">#FDECEC</color>
+    <color name="active">#E8590C</color>
 </resources>

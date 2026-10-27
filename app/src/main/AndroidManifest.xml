@@ -44,6 +44,10 @@
             android:foregroundServiceType="health" />
 
         <receiver
+            android:name=".MoveReminder"
+            android:exported="false" />
+
+        <receiver
             android:name=".BootReceiver"
             android:exported="true">
             <intent-filter>

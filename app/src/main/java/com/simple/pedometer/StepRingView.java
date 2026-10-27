@@ -20,14 +20,24 @@ public class StepRingView extends View {
 
     public StepRingView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        float stroke = 14 * getResources().getDisplayMetrics().density;
         trackPaint.setStyle(Paint.Style.STROKE);
-        trackPaint.setStrokeWidth(stroke);
         trackPaint.setColor(context.getColor(R.color.track));
         progressPaint.setStyle(Paint.Style.STROKE);
-        progressPaint.setStrokeWidth(stroke);
         progressPaint.setStrokeCap(Paint.Cap.ROUND);
         progressPaint.setColor(context.getColor(R.color.accent));
+    }
+
+    public void setColor(int color) {
+        progressPaint.setColor(color);
+        invalidate();
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        // 14dp on the big ring, proportionally thinner on small ones.
+        float stroke = Math.min(14 * getResources().getDisplayMetrics().density, w * 0.07f);
+        trackPaint.setStrokeWidth(stroke);
+        progressPaint.setStrokeWidth(stroke);
     }
 
     /** @param value fraction of the goal reached, 0..1 (values above 1 show a full ring). */

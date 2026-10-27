@@ -2,6 +2,7 @@ package com.simple.pedometer;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -12,9 +13,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.InputType;
 import android.text.format.DateUtils;
 import android.view.View;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.text.NumberFormat;
 import java.time.LocalDate;
@@ -27,6 +33,9 @@ public class MainActivity extends Activity {
 
     private static final int REQUEST_PERMISSIONS = 1;
     private static final int DAILY_GOAL = 10000;
+    private static final int ACTIVE_GOAL_MINUTES = 30;
+    /** Walking burns roughly 0.5 kcal per kg of body weight per km. */
+    private static final double KCAL_PER_KG_KM = 0.5;
     private static final DateTimeFormatter HEADER_FORMAT =
             DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault());
     private static final DateTimeFormatter DAY_FORMAT =
@@ -44,6 +53,14 @@ public class MainActivity extends Activity {
     private StepRingView ring;
     private BarChartView chart;
     private View batteryCard;
+    private StepRingView activeRing;
+    private TextView activeMinutes;
+    private TextView activeGoal;
+    private TextView distance;
+    private TextView calories;
+    private TextView speed;
+    private TextView profile;
+    private Switch reminderSwitch;
     private PulseStore pulseStore;
     private HeartView pulseHeart;
     private TextView pulseValue;
@@ -74,6 +91,18 @@ public class MainActivity extends Activity {
         pulseTime = findViewById(R.id.pulse_time);
         findViewById(R.id.pulse_widget).setOnClickListener(
                 v -> startActivity(new Intent(this, PulseActivity.class)));
+        activeRing = findViewById(R.id.active_ring);
+        activeRing.setColor(getColor(R.color.active));
+        activeMinutes = findViewById(R.id.active_minutes);
+        activeGoal = findViewById(R.id.active_goal);
+        distance = findViewById(R.id.distance);
+        calories = findViewById(R.id.calories);
+        speed = findViewById(R.id.speed);
+        profile = findViewById(R.id.profile);
+        profile.setOnClickListener(v -> editProfile());
+        reminderSwitch = findViewById(R.id.reminder_switch);
+        reminderSwitch.setChecked(store.remindersEnabled());
+        reminderSwitch.setOnCheckedChangeListener((b, checked) -> store.setRemindersEnabled(checked));
         findViewById(R.id.sensors_card).setOnClickListener(
                 v -> startActivity(new Intent(this, SensorsActivity.class)));
 
@@ -145,6 +174,27 @@ public class MainActivity extends Activity {
                 ? "Goal reached!"
                 : numberFormat.format(DAILY_GOAL - steps) + " to " + numberFormat.format(DAILY_GOAL));
 
+        int active = store.getActiveMinutes(today);
+        activeMinutes.setText(String.valueOf(active));
+        activeRing.setProgress((float) active / ACTIVE_GOAL_MINUTES);
+        activeGoal.setText(active >= ACTIVE_GOAL_MINUTES
+                ? "Goal of " + ACTIVE_GOAL_MINUTES + " min reached!"
+                : "Goal " + ACTIVE_GOAL_MINUTES + " min \u00B7 minutes with " + StepStore.ACTIVE_MINUTE_STEPS + "+ steps");
+
+        double stride = store.getStrideMeters();
+        double km = steps * stride / 1000.0;
+        distance.setText(km < 1
+                ? String.format(Locale.getDefault(), "%d m", Math.round(km * 1000))
+                : String.format(Locale.getDefault(), "%.2f km", km));
+        calories.setText(String.format(Locale.getDefault(), "%d kcal",
+                Math.round(km * store.getWeightKg() * KCAL_PER_KG_KM)));
+        speed.setText(active > 0
+                ? String.format(Locale.getDefault(), "%.1f km/h",
+                        store.getActiveSteps(today) * stride / 1000.0 / (active / 60.0))
+                : "--");
+        profile.setText(String.format(Locale.getDefault(),
+                "Based on %d cm, %d kg \u00B7 Edit", store.getHeightCm(), store.getWeightKg()));
+
         // Last 7 days, oldest first, ending with today.
         int[] values = new int[7];
         String[] labels = new String[7];
@@ -179,6 +229,56 @@ public class MainActivity extends Activity {
         PowerManager pm = getSystemService(PowerManager.class);
         batteryCard.setVisibility(pm.isIgnoringBatteryOptimizations(getPackageName())
                 ? View.GONE : View.VISIBLE);
+    }
+
+    private void editProfile() {
+        float density = getResources().getDisplayMetrics().density;
+        EditText height = new EditText(this);
+        height.setInputType(InputType.TYPE_CLASS_NUMBER);
+        height.setHint("Height (cm)");
+        height.setText(String.valueOf(store.getHeightCm()));
+        EditText weight = new EditText(this);
+        weight.setInputType(InputType.TYPE_CLASS_NUMBER);
+        weight.setHint("Weight (kg)");
+        weight.setText(String.valueOf(store.getWeightKg()));
+
+        TextView heightLabel = new TextView(this);
+        heightLabel.setText("Height (cm)");
+        TextView weightLabel = new TextView(this);
+        weightLabel.setText("Weight (kg)");
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (24 * density);
+        form.setPadding(pad, (int) (8 * density), pad, 0);
+        form.addView(heightLabel);
+        form.addView(height);
+        form.addView(weightLabel);
+        form.addView(weight);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Your height and weight")
+                .setMessage("Used to estimate distance and calories.")
+                .setView(form)
+                .setPositiveButton("Save", (d, w) -> {
+                    int h = parse(height, store.getHeightCm());
+                    int kg = parse(weight, store.getWeightKg());
+                    if (h >= 100 && h <= 230 && kg >= 30 && kg <= 250) {
+                        store.setProfile(h, kg);
+                    } else {
+                        Toast.makeText(this, "Please enter a height of 100-230 cm and weight of 30-250 kg",
+                                Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private static int parse(EditText field, int fallback) {
+        try {
+            return Integer.parseInt(field.getText().toString().trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     private void askToIgnoreBatteryOptimizations() {

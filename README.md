@@ -9,6 +9,9 @@ steps in a notification.
 - Today's step count, in big numbers
 - Progress ring towards a 10,000 step daily goal
 - Bar chart of the last 7 days with total, average and best day
+- Distance, calories and walking speed (based on your height and weight)
+- Active minutes (minutes with 60+ steps) towards a 30 minute daily goal
+- Hourly "time to move" reminder (10:00-21:00, under 250 steps in the past hour)
 - Light and dark mode
 - Phone sensors screen listing every sensor (with a Share button)
 - Pulse rate: tap the heart, cover the back camera and flash with your fingertip
@@ -55,6 +58,7 @@ Every push to GitHub also builds the APK automatically (see
   and updates the notification.
 - `StepStore` – saves steps per day. The sensor gives "steps since boot", so the
   app adds the difference between readings to today's total (handles reboots).
+- `MoveReminder` – hourly alarm that vibrates if you've been inactive.
 - `BootReceiver` – restarts the service after a reboot or app update.
 - `MainActivity` – asks for permissions and shows the counts.
 - `PulseActivity` – measures the pulse from the camera: with the flash on, each
