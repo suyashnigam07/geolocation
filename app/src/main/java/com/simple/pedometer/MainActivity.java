@@ -47,6 +47,10 @@ public class MainActivity extends Activity {
     private TextView stepsToday;
     private TextView goal;
     private TextView status;
+    private TextView blockLast;
+    private TextView blockBest;
+    private TextView blockAverage;
+    private TextView blockProgress;
     private TextView weekTotal;
     private TextView weekAverage;
     private TextView weekBest;
@@ -95,6 +99,10 @@ public class MainActivity extends Activity {
         stepsToday = findViewById(R.id.steps_today);
         goal = findViewById(R.id.goal);
         status = findViewById(R.id.status);
+        blockLast = findViewById(R.id.block_last);
+        blockBest = findViewById(R.id.block_best);
+        blockAverage = findViewById(R.id.block_average);
+        blockProgress = findViewById(R.id.block_progress);
         weekTotal = findViewById(R.id.week_total);
         weekAverage = findViewById(R.id.week_average);
         weekBest = findViewById(R.id.week_best);
@@ -210,6 +218,14 @@ public class MainActivity extends Activity {
                 ? "Goal reached!"
                 : numberFormat.format(DAILY_GOAL - steps) + " to " + numberFormat.format(DAILY_GOAL));
 
+        blockLast.setText(minutesSeconds(store.getLastBlockMillis()));
+        blockBest.setText(minutesSeconds(store.getBestBlockMillis(today)));
+        blockAverage.setText(minutesSeconds(store.getAverageBlockMillis(today)));
+        int inBlock = store.getCurrentBlockSteps();
+        blockProgress.setText(store.getLastBlockMillis() == 0 && inBlock == 0
+                ? "Measured while you walk; pauses don't count."
+                : "Next 1,000: " + numberFormat.format(inBlock) + " / 1,000 steps \u00B7 pauses don't count");
+
         int active = store.getActiveMinutes(today);
         activeMinutes.setText(String.valueOf(active));
         activeRing.setProgress((float) active / ACTIVE_GOAL_MINUTES);
@@ -314,6 +330,13 @@ public class MainActivity extends Activity {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    /** "9:40" (minutes:seconds), or "--" when there's nothing measured yet. */
+    private static String minutesSeconds(long millis) {
+        if (millis <= 0) return "--";
+        long s = Math.round(millis / 1000.0);
+        return String.format(Locale.getDefault(), "%d:%02d", s / 60, s % 60);
     }
 
     private static int parse(EditText field, int fallback) {

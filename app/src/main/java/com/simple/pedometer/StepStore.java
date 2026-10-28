@@ -31,6 +31,17 @@ public class StepStore {
     private static final String KEY_MINUTE_STEPS = "minute_steps";
     private static final String KEY_HOUR_MARK = "hour_mark";
     private static final String KEY_HOUR_MARK_DATE = "hour_mark_date";
+    /** Walking time is measured per block of this many steps. */
+    public static final int BLOCK_STEPS = 1000;
+    /** Gaps between steps longer than this are pauses and aren't counted as walking time. */
+    private static final long MAX_STEP_GAP_MILLIS = 5000;
+    private static final String KEY_LAST_STEP = "last_step_ms";
+    private static final String KEY_BLOCK_STEPS = "block_steps";
+    private static final String KEY_BLOCK_MILLIS = "block_ms";
+    private static final String KEY_LAST_BLOCK_MILLIS = "last_block_ms";
+    private static final String BLOCK_BEST_PREFIX = "block_best_";
+    private static final String BLOCK_COUNT_PREFIX = "block_count_";
+    private static final String BLOCK_TOTAL_PREFIX = "block_total_";
     private static final String KEY_HEIGHT = "height_cm";
     private static final String KEY_WEIGHT = "weight_kg";
     public static final String KEY_REMINDERS = "reminders";
@@ -96,7 +107,48 @@ public class StepStore {
             edit.putInt(activeStepsKey, prefs.getInt(activeStepsKey, 0) + 1);
         }
 
+        // Time to walk 1,000 steps: add up the time between steps, leaving out pauses.
+        long lastStep = prefs.getLong(KEY_LAST_STEP, 0);
+        long gap = wallMillis - lastStep;
+        long blockMillis = prefs.getLong(KEY_BLOCK_MILLIS, 0);
+        if (lastStep > 0 && gap > 0 && gap <= MAX_STEP_GAP_MILLIS) blockMillis += gap;
+        int blockSteps = prefs.getInt(KEY_BLOCK_STEPS, 0) + 1;
+        if (blockSteps >= BLOCK_STEPS) {
+            String best = BLOCK_BEST_PREFIX + date;
+            long previousBest = prefs.getLong(best, 0);
+            if (previousBest == 0 || blockMillis < previousBest) edit.putLong(best, blockMillis);
+            edit.putInt(BLOCK_COUNT_PREFIX + date, prefs.getInt(BLOCK_COUNT_PREFIX + date, 0) + 1);
+            edit.putLong(BLOCK_TOTAL_PREFIX + date, prefs.getLong(BLOCK_TOTAL_PREFIX + date, 0) + blockMillis);
+            edit.putLong(KEY_LAST_BLOCK_MILLIS, blockMillis);
+            blockSteps = 0;
+            blockMillis = 0;
+        }
+        edit.putLong(KEY_LAST_STEP, wallMillis)
+                .putInt(KEY_BLOCK_STEPS, blockSteps)
+                .putLong(KEY_BLOCK_MILLIS, blockMillis);
+
         edit.apply();
+    }
+
+    /** Walking time of the most recent 1,000 steps, or 0 if none yet. */
+    public long getLastBlockMillis() {
+        return prefs.getLong(KEY_LAST_BLOCK_MILLIS, 0);
+    }
+
+    /** Fastest 1,000 steps on the given day, or 0. */
+    public long getBestBlockMillis(LocalDate date) {
+        return prefs.getLong(BLOCK_BEST_PREFIX + date, 0);
+    }
+
+    /** Average walking time per 1,000 steps on the given day, or 0. */
+    public long getAverageBlockMillis(LocalDate date) {
+        int count = prefs.getInt(BLOCK_COUNT_PREFIX + date, 0);
+        return count == 0 ? 0 : prefs.getLong(BLOCK_TOTAL_PREFIX + date, 0) / count;
+    }
+
+    /** Steps counted so far towards the next 1,000. */
+    public int getCurrentBlockSteps() {
+        return prefs.getInt(KEY_BLOCK_STEPS, 0);
     }
 
     public int getActiveMinutes(LocalDate date) {
