@@ -7,7 +7,10 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 
-/** Starts counting again automatically after the phone restarts or the app is updated. */
+/**
+ * After a restart or app update: turns walk detection and the hourly reading
+ * back on, and saves the steps counted so far.
+ */
 public class BootReceiver extends BroadcastReceiver {
 
     @Override
@@ -22,6 +25,9 @@ public class BootReceiver extends BroadcastReceiver {
                         != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        StepService.start(context);
+        WalkDetector.register(context);
+        MoveReminder.schedule(context);
+        PendingResult pending = goAsync();
+        StepCounterReader.readOnce(context, pending::finish);
     }
 }

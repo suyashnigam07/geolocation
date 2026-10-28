@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.net.Uri;
 import android.os.Build;
@@ -61,12 +63,26 @@ public class MainActivity extends Activity {
     private TextView speed;
     private TextView profile;
     private Switch reminderSwitch;
-    private TextView walkSummary;
     private TextView rhythmSummary;
     private PulseStore pulseStore;
     private HeartView pulseHeart;
     private TextView pulseValue;
     private TextView pulseTime;
+
+    private SensorManager sensorManager;
+    private boolean canCount;
+
+    /** While the app is open, the step counter is read live. */
+    private final SensorEventListener liveCounter = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            store.onCounterReading((long) event.values[0]);
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    };
 
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener =
             (prefs, key) -> runOnUiThread(this::refresh);
@@ -90,9 +106,6 @@ public class MainActivity extends Activity {
         rhythmSummary = findViewById(R.id.rhythm_summary);
         findViewById(R.id.rhythm_card).setOnClickListener(
                 v -> startActivity(new Intent(this, RhythmActivity.class)));
-        walkSummary = findViewById(R.id.walk_summary);
-        findViewById(R.id.walk_card).setOnClickListener(
-                v -> startActivity(new Intent(this, WalkActivity.class)));
         pulseStore = new PulseStore(this);
         pulseHeart = findViewById(R.id.pulse_heart);
         pulseValue = findViewById(R.id.pulse_value);
@@ -112,7 +125,7 @@ public class MainActivity extends Activity {
         reminderSwitch.setChecked(store.remindersEnabled());
         reminderSwitch.setOnCheckedChangeListener((b, checked) -> store.setRemindersEnabled(checked));
 
-        SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        sensorManager = getSystemService(SensorManager.class);
         if (sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) == null) {
             status.setText("Sorry, this phone has no step counter sensor.");
             return;
@@ -124,12 +137,18 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         store.prefs().registerOnSharedPreferenceChangeListener(prefsListener);
+        if (canCount) {
+            sensorManager.registerListener(liveCounter,
+                    sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER),
+                    SensorManager.SENSOR_DELAY_NORMAL);
+        }
         refresh();
     }
 
     @Override
     protected void onPause() {
         store.prefs().unregisterOnSharedPreferenceChangeListener(prefsListener);
+        sensorManager.unregisterListener(liveCounter);
         super.onPause();
     }
 
@@ -166,8 +185,18 @@ public class MainActivity extends Activity {
     }
 
     private void startCounting() {
-        StepService.start(this);
-        status.setText("\u25CF  Counting in the background");
+        // No background service: the phone's step chip counts on its own, the
+        // app reads it hourly, and walk detection starts the service only
+        // while you walk.
+        WalkDetector.register(this);
+        MoveReminder.schedule(this);
+        if (!canCount) {
+            canCount = true;
+            sensorManager.registerListener(liveCounter,
+                    sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER),
+                    SensorManager.SENSOR_DELAY_NORMAL);
+        }
+        status.setText("\u25CF  Steps count automatically \u00B7 the app only runs while you walk");
     }
 
     private void refresh() {
@@ -192,7 +221,7 @@ public class MainActivity extends Activity {
         distance.setText(km < 1
                 ? String.format(Locale.getDefault(), "%d m", Math.round(km * 1000))
                 : String.format(Locale.getDefault(), "%.2f km", km));
-        calories.setText(String.format(Locale.getDefault(), "%d kcal",
+        calories.setText(String.format(Locale.getDefault(), "%d",
                 Math.round(km * store.getWeightKg() * KCAL_PER_KG_KM)));
         speed.setText(active > 0
                 ? String.format(Locale.getDefault(), "%.1f km/h",
@@ -223,18 +252,6 @@ public class MainActivity extends Activity {
                 ? "60-second camera check of rhythm and HRV"
                 : "Last: " + checks.get(0).statusText() + " \u00B7 HRV " + checks.get(0).rmssdMs + " ms \u00B7 "
                         + DateUtils.getRelativeTimeSpanString(checks.get(0).timeMillis));
-
-        if (WalkSession.isRecording()) {
-            walkSummary.setText("\u25CF  Walk in progress \u00B7 "
-                    + Walk.distance(WalkSession.current.distanceMeters));
-        } else {
-            List<Walk> walks = new WalkStore(this).getWalks();
-            walkSummary.setText(walks.isEmpty()
-                    ? "Track distance, time and route with GPS"
-                    : "Last: " + Walk.distance(walks.get(0).distanceMeters) + " \u00B7 "
-                            + Walk.duration(walks.get(0).durationMillis) + " \u00B7 "
-                            + DateUtils.getRelativeTimeSpanString(walks.get(0).startMillis));
-        }
 
         int bpm = pulseStore.getBpm();
         if (bpm > 0) {

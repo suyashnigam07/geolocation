@@ -84,7 +84,7 @@
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- Status on the left, last pulse reading on the right -->
+            <!-- Calories on the left, last pulse reading on the right -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -92,14 +92,58 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/status"
-                    android:layout_width="0dp"
+                <!-- Calories burned -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="@color/accent"
-                    android:fontFamily="sans-serif-medium"
-                    android:textSize="13sp" />
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="80dp"
+                        android:layout_height="80dp"
+                        android:background="@drawable/bg_calories"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@drawable/ic_flame" />
+
+                        <TextView
+                            android:id="@+id/calories"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:includeFontPadding="false"
+                            android:text="0"
+                            android:textColor="@color/text_primary"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:includeFontPadding="false"
+                            android:text="kcal"
+                            android:textColor="@color/active"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Burned today"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
 
                 <LinearLayout
                     android:id="@+id/pulse_widget"
@@ -158,6 +202,16 @@
                         android:textSize="11sp" />
                 </LinearLayout>
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:textColor="@color/accent"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <!-- This week -->
@@ -327,21 +381,6 @@
                     android:orientation="vertical">
 
                     <TextView
-                        android:id="@+id/calories"
-                        style="@style/StatValue" />
-
-                    <TextView
-                        style="@style/StatLabel"
-                        android:text="Calories" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
                         android:id="@+id/speed"
                         style="@style/StatValue" />
 
@@ -423,43 +462,6 @@
                 android:textSize="28sp" />
         </LinearLayout>
 
-        <!-- GPS walk -->
-        <LinearLayout
-            android:id="@+id/walk_card"
-            style="@style/Card"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?android:attr/selectableItemBackground"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    style="@style/CardTitle"
-                    android:text="Record a walk" />
-
-                <TextView
-                    android:id="@+id/walk_summary"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="\u203A"
-                android:textColor="@color/text_secondary"
-                android:textSize="28sp" />
-        </LinearLayout>
-
         <!-- Battery optimisation -->
         <LinearLayout
             android:id="@+id/battery_card"
@@ -476,7 +478,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Allow the app to ignore battery optimisation so Android doesn't stop it."
+                android:text="Lets the hourly step reading and move reminders run on time. The app itself only runs while you walk."
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp" />
 

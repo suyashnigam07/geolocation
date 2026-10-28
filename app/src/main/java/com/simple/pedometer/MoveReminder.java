@@ -14,10 +14,10 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Hourly "time to move" reminder. An alarm fires at the top of every hour;
- * between 10:00 and 21:00 it checks the steps taken in the hour that just
- * ended and, if there were fewer than {@link #MIN_STEPS}, vibrates with a
- * notification.
+ * Hourly alarm. Every hour it reads the step counter (so daily totals stay
+ * right without a background service), and between 10:00 and 21:00 it
+ * vibrates with a "time to move" notification if fewer than
+ * {@link #MIN_STEPS} steps were taken in the past hour.
  */
 public class MoveReminder extends BroadcastReceiver {
 
@@ -43,14 +43,20 @@ public class MoveReminder extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         schedule(context);
+        PendingResult pending = goAsync();
+        StepCounterReader.readOnce(context, () -> {
+            remindIfInactive(context);
+            pending.finish();
+        });
+    }
 
+    private static void remindIfInactive(Context context) {
         StepStore store = new StepStore(context);
+        int steps = store.takeStepsSinceLastHourMark();
         // Inexact alarms can fire a few minutes late, so round to the nearest hour.
         int hour = LocalDateTime.now().plusMinutes(30).getHour();
         if (!store.remindersEnabled() || hour < FIRST_HOUR || hour > LAST_HOUR) return;
-
-        int steps = store.getHourSteps(hour - 1);
-        if (steps >= MIN_STEPS) return;
+        if (steps < 0 || steps >= MIN_STEPS) return;
 
         NotificationManager nm = context.getSystemService(NotificationManager.class);
         NotificationChannel channel = new NotificationChannel(

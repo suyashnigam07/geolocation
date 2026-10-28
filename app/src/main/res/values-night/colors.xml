@@ -13,4 +13,5 @@
     <color name="heart">#FF6369</color>
     <color name="heart_soft">#3A1D1F</color>
     <color name="active">#FF922B</color>
+    <color name="active_soft">#3A2614</color>
 </resources>

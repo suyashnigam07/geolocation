@@ -19,8 +19,6 @@ jobs:
           java-version: 17
 
       - name: Build APK
-        env:
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon

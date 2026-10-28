@@ -12,14 +12,15 @@ import java.time.ZoneId;
  * Keeps the daily step totals in SharedPreferences.
  *
  * The hardware step counter reports the total number of steps since the phone
- * last booted. We remember the last value we saw and add the difference to
- * today's total, so steps are never lost even if the app was killed for a while
- * (the sensor keeps counting in hardware).
+ * last booted and keeps counting even when the app isn't running. The app
+ * reads it now and then (when opened, once an hour, and while walking) and
+ * adds the difference since the previous reading to the day's total.
  */
 public class StepStore {
 
     public static final String PREFS = "steps";
     private static final String KEY_LAST_COUNTER = "last_counter";
+    private static final String KEY_LAST_DATE = "last_date";
     private static final String DAY_PREFIX = "day_";
 
     /** A minute with at least this many steps counts as an active minute. */
@@ -28,8 +29,8 @@ public class StepStore {
     private static final String ACTIVE_STEPS_PREFIX = "active_steps_";
     private static final String KEY_MINUTE = "minute";
     private static final String KEY_MINUTE_STEPS = "minute_steps";
-    private static final String KEY_HOURS_DATE = "hours_date";
-    private static final String HOUR_PREFIX = "hour_";
+    private static final String KEY_HOUR_MARK = "hour_mark";
+    private static final String KEY_HOUR_MARK_DATE = "hour_mark_date";
     private static final String KEY_HEIGHT = "height_cm";
     private static final String KEY_WEIGHT = "weight_kg";
     public static final String KEY_REMINDERS = "reminders";
@@ -56,19 +57,24 @@ public class StepStore {
             delta = counter - last;
         }
 
-        String todayKey = DAY_PREFIX + LocalDate.now();
-        int today = (int) (prefs.getInt(todayKey, 0) + delta);
+        // Readings are at most about an hour apart. If midnight passed since the
+        // previous one, those steps were (almost always) taken before midnight,
+        // so they belong to the previous reading's day.
+        String today = LocalDate.now().toString();
+        String dayOfSteps = prefs.getString(KEY_LAST_DATE, today);
+        String key = DAY_PREFIX + dayOfSteps;
         prefs.edit()
                 .putLong(KEY_LAST_COUNTER, counter)
-                .putInt(todayKey, today)
+                .putString(KEY_LAST_DATE, today)
+                .putInt(key, (int) (prefs.getInt(key, 0) + delta))
                 .apply();
-        return today;
+        return prefs.getInt(DAY_PREFIX + today, 0);
     }
 
     /**
-     * Records a single step from the step detector. The detector reports each
-     * step with the time it happened, so it is used for per-minute and
-     * per-hour figures (the counter above can arrive late in batches).
+     * Records a single step from the step detector while walking. The detector
+     * reports each step with the time it happened, so it is used for active
+     * minutes (the counter above can arrive late in batches).
      */
     public synchronized void onStepDetected(long wallMillis) {
         LocalDateTime time = LocalDateTime.ofInstant(
@@ -90,14 +96,6 @@ public class StepStore {
             edit.putInt(activeStepsKey, prefs.getInt(activeStepsKey, 0) + 1);
         }
 
-        // Steps per hour of today, used by the move reminder.
-        boolean newDay = !date.toString().equals(prefs.getString(KEY_HOURS_DATE, ""));
-        if (newDay) {
-            for (int h = 0; h < 24; h++) edit.remove(HOUR_PREFIX + h);
-            edit.putString(KEY_HOURS_DATE, date.toString());
-        }
-        String hourKey = HOUR_PREFIX + time.getHour();
-        edit.putInt(hourKey, (newDay ? 0 : prefs.getInt(hourKey, 0)) + 1);
         edit.apply();
     }
 
@@ -110,10 +108,17 @@ public class StepStore {
         return prefs.getInt(ACTIVE_STEPS_PREFIX + date, 0);
     }
 
-    /** Steps detected in the given hour (0-23) of today. */
-    public int getHourSteps(int hour) {
-        if (!LocalDate.now().toString().equals(prefs.getString(KEY_HOURS_DATE, ""))) return 0;
-        return prefs.getInt(HOUR_PREFIX + hour, 0);
+    /**
+     * Steps taken since the previous call (used by the hourly reminder), or -1
+     * on the first call of the day.
+     */
+    public int takeStepsSinceLastHourMark() {
+        String today = LocalDate.now().toString();
+        int total = getToday();
+        boolean sameDay = today.equals(prefs.getString(KEY_HOUR_MARK_DATE, ""));
+        int steps = sameDay ? total - prefs.getInt(KEY_HOUR_MARK, 0) : -1;
+        prefs.edit().putInt(KEY_HOUR_MARK, total).putString(KEY_HOUR_MARK_DATE, today).apply();
+        return steps;
     }
 
     public int getHeightCm() {
