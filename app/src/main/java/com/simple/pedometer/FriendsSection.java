@@ -30,16 +30,10 @@ import androidx.credentials.exceptions.NoCredentialException;
 
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
-import com.google.firebase.Timestamp;
-import com.google.firebase.firestore.DocumentSnapshot;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.ListenerRegistration;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Executor;
 
 /** The "Friends today" card on the main screen: you and up to 3 friends, ranked by steps. */
@@ -61,9 +55,6 @@ class FriendsSection {
     private final TextView message;
     private final Button add;
     private List<Friends.Activity> lastFriends = new ArrayList<>();
-    private ListenerRegistration incomingCalls;
-    /** Calls already shown, so the ringing screen opens once per call. */
-    private static final Set<String> shownCalls = new HashSet<>();
 
     FriendsSection(Activity activity) {
         this.activity = activity;
@@ -105,7 +96,6 @@ class FriendsSection {
             return;
         }
         code.setText("Your code: " + Friends.myCode(activity) + "  \u2197");
-        startListeningForCalls();
         render(lastFriends);
         Friends.upload(activity);
         Friends.fetch(activity).addOnCompleteListener(activity, t -> {
@@ -171,7 +161,6 @@ class FriendsSection {
                 .setMessage("Friends stop updating on this phone until you sign in again. "
                         + "Your code and friends stay saved in your account.")
                 .setPositiveButton("Sign out", (d, w) -> {
-                    stopListeningForCalls();
                     Friends.signOut(activity);
                     lastFriends = new ArrayList<>();
                     // Also forget the chosen account so the account picker shows next time.
@@ -195,33 +184,6 @@ class FriendsSection {
     private static Executor mainThread() {
         Handler handler = new Handler(Looper.getMainLooper());
         return handler::post;
-    }
-
-    /**
-     * While the app is open, watches for friends calling you and opens the
-     * ringing screen. (Calls don't ring when the app is closed.)
-     */
-    void startListeningForCalls() {
-        if (!Friends.isSignedIn() || incomingCalls != null) return;
-        incomingCalls = FirebaseFirestore.getInstance().collection("calls")
-                .whereEqualTo("callee", Friends.user().getUid())
-                .whereEqualTo("status", "ringing")
-                .addSnapshotListener(activity, (snap, e) -> {
-                    if (snap == null) return;
-                    for (DocumentSnapshot call : snap.getDocuments()) {
-                        Timestamp created = call.getTimestamp("created");
-                        boolean recent = created != null
-                                && System.currentTimeMillis() - created.toDate().getTime() < 60_000;
-                        if (recent && shownCalls.add(call.getId())) {
-                            CallActivity.ring(activity, call.getId(), call.getString("callerName"));
-                        }
-                    }
-                });
-    }
-
-    void stopListeningForCalls() {
-        if (incomingCalls != null) incomingCalls.remove();
-        incomingCalls = null;
     }
 
     /** Called when your own steps change, without going online. */
@@ -256,7 +218,6 @@ class FriendsSection {
         TextView steps = row.findViewById(R.id.friend_steps);
         TextView detail = row.findViewById(R.id.friend_detail);
         MiniBarsView bars = row.findViewById(R.id.friend_bars);
-        View call = row.findViewById(R.id.friend_call);
 
         String displayName = a.name == null || a.name.isEmpty() ? a.code : a.name;
         initial.setText(displayName.substring(0, 1).toUpperCase());
@@ -280,10 +241,6 @@ class FriendsSection {
             }
             detail.setText(info);
             bars.setValues(a.last7Days);
-        }
-        if (!a.isMe && !a.pending) {
-            call.setVisibility(View.VISIBLE);
-            call.setOnClickListener(v -> CallActivity.call(activity, a.uid, displayName));
         }
         if (!a.isMe) row.setOnLongClickListener(v -> {
             confirmRemove(a, displayName);

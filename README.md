@@ -18,7 +18,6 @@ notification) while you are walking.
   pulse trace and beat-to-beat chart. Not an ECG and not a diagnosis.
 - Friends: share steps with up to 3 friends and see everyone ranked on the main screen
   (mutual friend codes; pulse and heart data are never shared)
-- 1-to-1 video calls with friends (WebRTC; rings only while the app is open)
 - Light and dark mode
 - Pulse rate: tap the heart, cover the back camera and flash with your fingertip
   for ~20 seconds (an estimate, not a medical device)
@@ -57,10 +56,6 @@ Friends sharing uses the Firebase project **freindspedometer**: Google Sign-In
   `npx -y firebase-tools@latest deploy --only firestore`.
 - `firebase.json` – Firestore and Google Sign-In settings
   (`npx -y firebase-tools@latest deploy --only auth`).
-
-Video calls use WebRTC directly between the phones, with Firestore (`calls`
-collection) carrying the call setup and Google's public STUN server. There is no
-relay (TURN) server yet, so a few mobile networks can't connect.
 
 Google Sign-In on Android only works for APKs signed with a key whose SHA-1 is
 registered on the Firebase Android app (the committed `app/debug.keystore` is).

@@ -21,28 +21,8 @@ rules_version = '2';
 //   - calories: int (required, 0-20000) - calories burned on `date`
 //   - updated: timestamp (required, server time of the write)
 //
-// Collection: calls
-// Document ID: auto-generated
-// Fields:
-//   - caller: string (required, immutable) - uid of the person calling
-//   - callee: string (required, immutable) - uid of the friend being called
-//   - callerName: string (required, immutable, 1-40 chars) - shown on the ringing screen
-//   - status: string (required) - 'ringing' | 'accepted' | 'declined' | 'ended' | 'missed'
-//   - offer: map {type: 'offer', sdp: string < 20000} (required, immutable) - WebRTC offer
-//   - answer: map {type: 'answer', sdp: string < 20000} (optional, set once by the callee)
-//   - created: timestamp (required, immutable, server time)
-//
-// Subcollection: calls/{callId}/candidates
-// Document ID: auto-generated
-// Fields:
-//   - from: string (required) - uid of the participant who found this network route
-//   - candidate: string (required, < 2000) - WebRTC ICE candidate
-//   - sdpMid: string (required, < 64)
-//   - sdpMLineIndex: int (required, 0-20)
-//
 // Sharing is mutual: a person's document is readable only by themselves and
 // by the uids they put in `readers` (the friends whose codes they added).
-// Calls are only possible between two people who added each other.
 // ===============================================================
 
 service cloud.firestore {
@@ -91,25 +71,6 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/codes/$(code)).data.uid == request.auth.uid;
     }
 
-    function userDoc(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data;
-    }
-
-    // Both people added each other's friend code.
-    function areFriends(a, b) {
-      return a != b && b in userDoc(a).readers && a in userDoc(b).readers;
-    }
-
-    function isParticipant(call) {
-      return isAuthenticated()
-        && (request.auth.uid == call.caller || request.auth.uid == call.callee);
-    }
-
-    function isValidSdp(desc, type) {
-      return desc is map && desc.keys().hasOnly(['type', 'sdp']) && desc.keys().hasAll(['type', 'sdp'])
-        && desc.type == type && desc.sdp is string && desc.sdp.size() > 0 && desc.sdp.size() < 20000;
-    }
-
     // ===============================================================
     // Domain Validators
     // ===============================================================
@@ -132,36 +93,6 @@ service cloud.firestore {
         && data.updated == request.time;
     }
 
-    function isValidNewCall(data) {
-      let fields = ['caller', 'callee', 'callerName', 'status', 'offer', 'created'];
-      return hasOnlyAllowedFields(fields) && hasRequiredFields(fields)
-        && data.caller == request.auth.uid
-        && isValidUid(data.callee)
-        && data.callerName is string && data.callerName.size() >= 1 && data.callerName.size() <= 40
-        && data.status == 'ringing'
-        && isValidSdp(data.offer, 'offer')
-        && data.created == request.time;
-    }
-
-    // Only `status` and (once, by the callee) `answer` may change.
-    function isValidCallUpdate(before, after) {
-      let changed = after.diff(before).affectedKeys();
-      return changed.hasOnly(['status', 'answer'])
-        && after.status in ['ringing', 'accepted', 'declined', 'ended', 'missed']
-        && (!('answer' in changed)
-            || (request.auth.uid == before.callee && !('answer' in before)
-                && isValidSdp(after.answer, 'answer')));
-    }
-
-    function isValidCandidate(data) {
-      let fields = ['from', 'candidate', 'sdpMid', 'sdpMLineIndex'];
-      return hasOnlyAllowedFields(fields) && hasRequiredFields(fields)
-        && data.from == request.auth.uid
-        && data.candidate is string && data.candidate.size() > 0 && data.candidate.size() < 2000
-        && data.sdpMid is string && data.sdpMid.size() < 64
-        && data.sdpMLineIndex is int && data.sdpMLineIndex >= 0 && data.sdpMLineIndex <= 20;
-    }
-
     // ===============================================================
     // Rules
     // ===============================================================
@@ -182,23 +113,6 @@ service cloud.firestore {
                   || (isAuthenticated() && request.auth.uid in resource.data.readers);
       allow create, update: if isOwner(userId) && isValidUserDoc(request.resource.data);
       allow delete: if isOwner(userId);
-    }
-
-    // Video calls between two mutual friends. Only the two participants can
-    // see a call; only friends can start one.
-    match /calls/{callId} {
-      allow read: if isParticipant(resource.data);
-      allow create: if isAuthenticated() && isValidNewCall(request.resource.data)
-                    && areFriends(request.auth.uid, request.resource.data.callee);
-      allow update: if isParticipant(resource.data)
-                    && isValidCallUpdate(resource.data, request.resource.data);
-
-      // Network routes (ICE candidates) exchanged while connecting.
-      match /candidates/{candidateId} {
-        allow read: if isParticipant(get(/databases/$(database)/documents/calls/$(callId)).data);
-        allow create: if isParticipant(get(/databases/$(database)/documents/calls/$(callId)).data)
-                      && isValidCandidate(request.resource.data);
-      }
     }
   }
 }
