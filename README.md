@@ -45,27 +45,22 @@ time to see today's steps and the last 7 days.
 > If counting stops, set the app's battery setting to **Unrestricted** / enable
 > **Autostart** in the phone's Settings → Apps → Pedometer.
 
-## Friends sharing setup (Firebase, one time)
+## Friends sharing (Firebase)
 
-Sharing with friends needs a free Firebase project. Without it the app works
-normally and the Friends card says it isn't set up.
+Friends sharing uses the Firebase project **freindspedometer**: Google Sign-In
+(Firebase Authentication) and Cloud Firestore (Standard edition, asia-south1).
 
-1. Go to <https://console.firebase.google.com/> → **Create a project** (Google
-   Analytics is not needed).
-2. **Build → Authentication → Get started → Sign-in method → Anonymous → Enable.**
-3. **Build → Firestore Database → Create database** → choose a location near you →
-   start in **production mode**. Then open the **Rules** tab, replace everything with
-   the contents of [`firestore.rules`](firestore.rules) and click **Publish**.
-4. **Project settings (gear icon) → Your apps → Android icon**: package name
-   `com.simple.pedometer` → Register app → **Download google-services.json**.
-5. Add the file to the app, either way works:
-   - upload it to the `app/` folder of this repository (Firebase's config is not a
-     secret; the security rules protect the data), or
-   - add a repository secret named `GOOGLE_SERVICES_JSON` with the file's contents.
-6. A new APK is built automatically; install it on every phone.
+- `app/google-services.json` – config of the registered Android app
+  `com.simple.pedometer` (not a secret; the security rules protect the data).
+- `firestore.rules` – who can read/write what. Deploy changes with
+  `npx -y firebase-tools@latest deploy --only firestore`.
+- `firebase.json` – Firestore and Google Sign-In settings
+  (`npx -y firebase-tools@latest deploy --only auth`).
 
-Each phone signs in anonymously; no email or password is needed. Reinstalling the
-app gives you a new friend code, so friends would need to add you again.
+Google Sign-In on Android only works for APKs signed with a key whose SHA-1 is
+registered on the Firebase Android app (the committed `app/debug.keystore` is).
+Signing in with the same Google account on a new phone brings back your friend
+code and friends.
 
 ## Build it yourself
 

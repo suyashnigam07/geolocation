@@ -5,10 +5,10 @@ import android.content.SharedPreferences;
 
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
 import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
@@ -27,7 +27,7 @@ import java.util.Map;
 
 /**
  * Sharing daily activity with up to {@link #MAX_FRIENDS} friends through
- * Firebase. Each person has a short friend code. You see a friend only after
+ * Firebase (Google Sign-In + Firestore). Each person has a short friend code. You see a friend only after
  * you have both added each other's code: each person's data can only be read
  * by the people they added themselves (enforced by the Firestore rules).
  *
@@ -67,28 +67,66 @@ final class Friends {
 
     // ------------------------------------------------------------ Firebase
 
-    static boolean isConfigured() {
-        return !BuildConfig.FIREBASE_PROJECT_ID.isEmpty();
+    private static FirebaseFirestore db() {
+        return FirebaseFirestore.getInstance();
     }
 
-    private static synchronized FirebaseApp app(Context context) {
-        if (!FirebaseApp.getApps(context).isEmpty()) return FirebaseApp.getInstance();
-        return FirebaseApp.initializeApp(context.getApplicationContext(), new FirebaseOptions.Builder()
-                .setApiKey(BuildConfig.FIREBASE_API_KEY)
-                .setApplicationId(BuildConfig.FIREBASE_APP_ID)
-                .setProjectId(BuildConfig.FIREBASE_PROJECT_ID)
-                .build());
+    static FirebaseUser user() {
+        return FirebaseAuth.getInstance().getCurrentUser();
     }
 
-    private static FirebaseFirestore db(Context context) {
-        return FirebaseFirestore.getInstance(app(context));
+    static boolean isSignedIn() {
+        return user() != null;
     }
 
-    /** Signs in anonymously (once per install) and returns this phone's user id. */
-    private static Task<String> uid(Context context) {
-        FirebaseAuth auth = FirebaseAuth.getInstance(app(context));
-        if (auth.getCurrentUser() != null) return Tasks.forResult(auth.getCurrentUser().getUid());
-        return auth.signInAnonymously().continueWith(t -> t.getResult().getUser().getUid());
+    private static Task<String> uid() {
+        FirebaseUser user = user();
+        return user != null ? Tasks.forResult(user.getUid())
+                : Tasks.forException(new IllegalStateException("Not signed in"));
+    }
+
+    /** Signs in to Firebase with the ID token from "Sign in with Google", then restores any earlier setup. */
+    static Task<Void> signInWithGoogle(Context context, String idToken) {
+        return FirebaseAuth.getInstance()
+                .signInWithCredential(GoogleAuthProvider.getCredential(idToken, null))
+                .continueWithTask(t -> {
+                    t.getResult();
+                    return restore(context);
+                });
+    }
+
+    /**
+     * After signing in (e.g. on a new phone or after reinstalling), brings
+     * back your name, friend code and friends from your Firestore document.
+     */
+    private static Task<Void> restore(Context context) {
+        return uid().continueWithTask(t -> db().collection("users").document(t.getResult()).get())
+                .continueWith(t -> {
+                    DocumentSnapshot doc = t.getResult();
+                    if (!doc.exists()) return null;
+                    prefs(context).edit()
+                            .putString(KEY_NAME, doc.getString("name"))
+                            .putString(KEY_CODE, doc.getString("code"))
+                            .apply();
+                    List<Friend> friends = new ArrayList<>();
+                    Object readers = doc.get("readers");
+                    if (readers instanceof List) {
+                        for (Object uid : (List<?>) readers) {
+                            Friend f = new Friend();
+                            f.uid = String.valueOf(uid);
+                            f.code = "";
+                            friends.add(f);
+                        }
+                    }
+                    saveFriends(context, friends);
+                    return null;
+                });
+    }
+
+    /** Signs out and forgets the friends setup on this phone (it stays saved in your account). */
+    static void signOut(Context context) {
+        FirebaseAuth.getInstance().signOut();
+        prefs(context).edit().clear().apply();
     }
 
     // --------------------------------------------------------- local state
@@ -106,7 +144,7 @@ final class Friends {
     }
 
     static boolean isSetUp(Context context) {
-        return isConfigured() && !myCode(context).isEmpty();
+        return isSignedIn() && !myCode(context).isEmpty();
     }
 
     static List<Friend> friends(Context context) {
@@ -140,7 +178,7 @@ final class Friends {
     /** First-time setup: picks a free friend code for this phone and uploads. */
     static Task<Void> setUp(Context context, String name) {
         prefs(context).edit().putString(KEY_NAME, name).apply();
-        return uid(context).continueWithTask(t -> claimCode(context, t.getResult(), 0))
+        return uid().continueWithTask(t -> claimCode(t.getResult(), 0))
                 .continueWithTask(t -> {
                     prefs(context).edit().putString(KEY_CODE, t.getResult()).apply();
                     return upload(context);
@@ -148,14 +186,14 @@ final class Friends {
     }
 
     /** Tries random codes until one is free (creating an existing code is refused). */
-    private static Task<String> claimCode(Context context, String uid, int attempt) {
+    private static Task<String> claimCode(String uid, int attempt) {
         String code = randomCode();
         Map<String, Object> data = new HashMap<>();
         data.put("uid", uid);
-        return db(context).collection("codes").document(code).set(data).continueWithTask(t -> {
+        return db().collection("codes").document(code).set(data).continueWithTask(t -> {
             if (t.isSuccessful()) return Tasks.forResult(code);
             if (attempt >= 4) return Tasks.forException(t.getException());
-            return claimCode(context, uid, attempt + 1);
+            return claimCode(uid, attempt + 1);
         });
     }
 
@@ -188,8 +226,8 @@ final class Friends {
         data.put("active", store.getActiveMinutes(today));
         data.put("calories", store.caloriesFor(store.getToday()));
         data.put("updated", FieldValue.serverTimestamp());
-        return uid(context).continueWithTask(t ->
-                db(context).collection("users").document(t.getResult()).set(data));
+        return uid().continueWithTask(t ->
+                db().collection("users").document(t.getResult()).set(data));
     }
 
     /** Adds a friend by their code; you'll see them once they add your code too. */
@@ -208,10 +246,15 @@ final class Friends {
                 return Tasks.forException(new IllegalArgumentException("You already added " + code + "."));
             }
         }
-        return db(context).collection("codes").document(code).get().continueWithTask(t -> {
+        return db().collection("codes").document(code).get().continueWithTask(t -> {
             DocumentSnapshot doc = t.getResult();
             if (!doc.exists() || doc.getString("uid") == null) {
                 throw new IllegalArgumentException("No one has the code " + code + ".");
+            }
+            for (Friend existing : friends) {
+                if (existing.uid.equals(doc.getString("uid"))) {
+                    throw new IllegalArgumentException("You already added " + code + ".");
+                }
             }
             Friend f = new Friend();
             f.uid = doc.getString("uid");
@@ -235,7 +278,7 @@ final class Friends {
         List<Friend> friends = friends(context);
         List<Task<DocumentSnapshot>> reads = new ArrayList<>();
         for (Friend f : friends) {
-            DocumentReference ref = db(context).collection("users").document(f.uid);
+            DocumentReference ref = db().collection("users").document(f.uid);
             reads.add(ref.get());
         }
         return Tasks.whenAllComplete(reads).continueWith(t -> {
@@ -246,8 +289,8 @@ final class Friends {
                         ? fromDocument(read.getResult()) : new Activity();
                 a.pending = !read.isSuccessful() || !read.getResult().exists();
                 a.uid = friends.get(i).uid;
-                a.code = friends.get(i).code;
-                if (a.name == null) a.name = a.code;
+                if (a.code == null) a.code = friends.get(i).code;
+                if (a.name == null) a.name = a.code.isEmpty() ? "Friend" : a.code;
                 result.add(a);
             }
             return result;
@@ -257,6 +300,7 @@ final class Friends {
     private static Activity fromDocument(DocumentSnapshot doc) {
         Activity a = new Activity();
         a.name = doc.getString("name");
+        a.code = doc.getString("code");
         LocalDate today = LocalDate.now();
         Object days = doc.get("days");
         if (days instanceof Map) {

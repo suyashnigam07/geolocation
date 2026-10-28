@@ -305,7 +305,41 @@
                     android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- Shown until you pick a name -->
+            <!-- Step 1: sign in with Google -->
+            <LinearLayout
+                android:id="@+id/friends_signin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Share your steps with up to 3 friends and see theirs here. Only friends who add your code (and whose code you add) can see you. Pulse and heart data stay private."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+
+                <Button
+                    android:id="@+id/friends_google"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_google_button"
+                    android:drawableStart="@drawable/ic_google"
+                    android:drawablePadding="10dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingStart="18dp"
+                    android:paddingEnd="20dp"
+                    android:stateListAnimator="@null"
+                    android:text="Sign in with Google"
+                    android:textAllCaps="false"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp" />
+            </LinearLayout>
+
+            <!-- Step 2: pick the name friends will see -->
             <LinearLayout
                 android:id="@+id/friends_setup"
                 android:layout_width="match_parent"
@@ -317,7 +351,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="Share your steps with up to 3 friends and see theirs here. Only friends who add your code (and whose code you add) can see you. Pulse and heart data stay private."
+                    android:text="Choose the name your friends will see."
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp" />
 
@@ -375,6 +409,17 @@
                 android:textAllCaps="false"
                 android:textColor="@color/accent"
                 android:textSize="14sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/friends_signout"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:padding="4dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
                 android:visibility="gone" />
         </LinearLayout>
 

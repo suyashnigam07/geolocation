@@ -3,6 +3,9 @@ package com.simple.pedometer;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.os.CancellationSignal;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.text.format.DateUtils;
@@ -13,9 +16,25 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.credentials.ClearCredentialStateRequest;
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.ClearCredentialException;
+import androidx.credentials.exceptions.GetCredentialCancellationException;
+import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.NoCredentialException;
+
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
+
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /** The "Friends today" card on the main screen: you and up to 3 friends, ranked by steps. */
 class FriendsSection {
@@ -28,7 +47,9 @@ class FriendsSection {
     private final Activity activity;
     private final NumberFormat numberFormat = NumberFormat.getIntegerInstance();
     private final TextView code;
+    private final View signIn;
     private final View setup;
+    private final TextView signOut;
     private final EditText name;
     private final LinearLayout list;
     private final TextView message;
@@ -38,35 +59,43 @@ class FriendsSection {
     FriendsSection(Activity activity) {
         this.activity = activity;
         code = activity.findViewById(R.id.friends_code);
+        signIn = activity.findViewById(R.id.friends_signin);
         setup = activity.findViewById(R.id.friends_setup);
+        signOut = activity.findViewById(R.id.friends_signout);
         name = activity.findViewById(R.id.friends_name);
         list = activity.findViewById(R.id.friends_list);
         message = activity.findViewById(R.id.friends_message);
         add = activity.findViewById(R.id.friends_add);
+        activity.findViewById(R.id.friends_google).setOnClickListener(v -> signInWithGoogle());
         activity.findViewById(R.id.friends_start).setOnClickListener(v -> startSharing());
+        signOut.setOnClickListener(v -> confirmSignOut());
         add.setOnClickListener(v -> askForCode());
         code.setOnClickListener(v -> shareCode());
     }
 
     /** Uploads your numbers and fetches your friends'. Call when the screen opens. */
     void refresh() {
-        if (!Friends.isConfigured()) {
-            setup.setVisibility(View.GONE);
-            add.setVisibility(View.GONE);
-            code.setText("");
-            showMessage("Sharing with friends isn't set up in this version of the app yet.");
-            return;
+        boolean signedIn = Friends.isSignedIn();
+        boolean setUp = Friends.isSetUp(activity);
+        signIn.setVisibility(signedIn ? View.GONE : View.VISIBLE);
+        setup.setVisibility(signedIn && !setUp ? View.VISIBLE : View.GONE);
+        signOut.setVisibility(signedIn ? View.VISIBLE : View.GONE);
+        if (signedIn) {
+            String email = Friends.user().getEmail();
+            signOut.setText("Signed in" + (email == null ? "" : " as " + email) + " \u00B7 Sign out");
         }
-        if (!Friends.isSetUp(activity)) {
-            setup.setVisibility(View.VISIBLE);
+        if (!setUp) {
             add.setVisibility(View.GONE);
             code.setText("");
             list.removeAllViews();
+            if (signedIn && name.getText().length() == 0 && Friends.user().getDisplayName() != null) {
+                // Suggest the first name from the Google account.
+                name.setText(Friends.user().getDisplayName().split(" ")[0]);
+            }
             showMessage(null);
             return;
         }
-        setup.setVisibility(View.GONE);
-        code.setText("Your code: " + Friends.myCode(activity) + "  ↗");
+        code.setText("Your code: " + Friends.myCode(activity) + "  \u2197");
         render(lastFriends);
         Friends.upload(activity);
         Friends.fetch(activity).addOnCompleteListener(activity, t -> {
@@ -77,6 +106,84 @@ class FriendsSection {
                 showMessage("Couldn't reach the internet to update friends.");
             }
         });
+    }
+
+    /** Shows Google's account picker, then signs in to Firebase with the chosen account. */
+    private void signInWithGoogle() {
+        GetSignInWithGoogleOption option = new GetSignInWithGoogleOption.Builder(
+                activity.getString(R.string.default_web_client_id)).build();
+        GetCredentialRequest request = new GetCredentialRequest.Builder()
+                .addCredentialOption(option)
+                .build();
+        showMessage("Signing in…");
+        CredentialManager.create(activity).getCredentialAsync(activity, request, new CancellationSignal(),
+                mainThread(), new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                    @Override
+                    public void onResult(GetCredentialResponse response) {
+                        Credential credential = response.getCredential();
+                        if (!(credential instanceof CustomCredential) || !GoogleIdTokenCredential
+                                .TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(credential.getType())) {
+                            showMessage("Sign-in failed: unexpected account type.");
+                            return;
+                        }
+                        String idToken;
+                        try {
+                            idToken = GoogleIdTokenCredential.createFrom(credential.getData()).getIdToken();
+                        } catch (Exception e) {
+                            showMessage("Sign-in failed. Please try again.");
+                            return;
+                        }
+                        Friends.signInWithGoogle(activity, idToken).addOnCompleteListener(activity, t -> {
+                            if (t.isSuccessful()) {
+                                refresh();
+                            } else {
+                                showMessage("Sign-in failed. Check your internet connection and try again.");
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(GetCredentialException e) {
+                        if (e instanceof GetCredentialCancellationException) {
+                            showMessage(null);
+                        } else if (e instanceof NoCredentialException) {
+                            showMessage("No Google account found. Add one in your phone's Settings → Accounts.");
+                        } else {
+                            showMessage("Sign-in failed: " + e.getMessage());
+                        }
+                    }
+                });
+    }
+
+    private void confirmSignOut() {
+        new AlertDialog.Builder(activity)
+                .setTitle("Sign out?")
+                .setMessage("Friends stop updating on this phone until you sign in again. "
+                        + "Your code and friends stay saved in your account.")
+                .setPositiveButton("Sign out", (d, w) -> {
+                    Friends.signOut(activity);
+                    lastFriends = new ArrayList<>();
+                    // Also forget the chosen account so the account picker shows next time.
+                    CredentialManager.create(activity).clearCredentialStateAsync(
+                            new ClearCredentialStateRequest(), new CancellationSignal(), mainThread(),
+                            new CredentialManagerCallback<Void, ClearCredentialException>() {
+                                @Override
+                                public void onResult(Void result) {
+                                }
+
+                                @Override
+                                public void onError(ClearCredentialException e) {
+                                }
+                            });
+                    refresh();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private static Executor mainThread() {
+        Handler handler = new Handler(Looper.getMainLooper());
+        return handler::post;
     }
 
     /** Called when your own steps change, without going online. */
@@ -120,7 +227,8 @@ class FriendsSection {
             rankText.setText("⏳");
             ring.setProgress(0);
             steps.setText("Waiting for them to add you back");
-            detail.setText("Ask " + a.code + " to add your code " + Friends.myCode(activity));
+            detail.setText("Ask " + (a.code.isEmpty() ? "your friend" : a.code)
+                    + " to add your code " + Friends.myCode(activity));
             bars.setVisibility(View.INVISIBLE);
         } else {
             rankText.setText(rank < MEDALS.length ? MEDALS[rank] : String.valueOf(rank + 1));
