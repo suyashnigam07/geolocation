@@ -70,7 +70,20 @@
 
     <com.simple.pedometer.MiniBarsView
         android:id="@+id/friend_bars"
-        android:layout_width="64dp"
+        android:layout_width="56dp"
         android:layout_height="34dp"
         android:layout_marginStart="8dp" />
+
+    <ImageButton
+        android:id="@+id/friend_call"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_friend_call_button"
+        android:contentDescription="Video call"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_videocam"
+        android:tint="@color/accent"
+        android:visibility="gone" />
 </LinearLayout>

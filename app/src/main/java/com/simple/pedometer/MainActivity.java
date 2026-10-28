@@ -144,12 +144,14 @@ public class MainActivity extends Activity {
         }
         refresh();
         friendsSection.refresh();
+        friendsSection.startListeningForCalls();
     }
 
     @Override
     protected void onPause() {
         store.prefs().unregisterOnSharedPreferenceChangeListener(prefsListener);
         sensorManager.unregisterListener(liveCounter);
+        friendsSection.stopListeningForCalls();
         super.onPause();
     }
 
