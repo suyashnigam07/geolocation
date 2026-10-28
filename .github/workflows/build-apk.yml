@@ -22,10 +22,12 @@ jobs:
         run: |
           for a in com/google/gms/google-services com/google/firebase/firebase-bom \
                    androidx/credentials/credentials androidx/credentials/credentials-play-services-auth \
-                   com/google/android/libraries/identity/googleid/googleid; do
-            v=$(curl -s https://dl.google.com/dl/android/maven2/$a/maven-metadata.xml | grep -oE '<(latest|release)>[^<]+' | head -2 | tr '\n' ' ')
-            echo "LATEST $a $v"
+                   com/google/android/libraries/identity/googleid/googleid com/android/tools/build/gradle; do
+            v=$(curl -s https://dl.google.com/dl/android/maven2/$a/maven-metadata.xml | grep -oE '<version>[^<]+' | cut -d'>' -f2 | grep -vE 'alpha|beta|rc' | tail -3 | tr '\n' ' ')
+            echo "STABLE $a $v"
           done
+          curl -s https://dl.google.com/dl/android/maven2/com/google/firebase/firebase-bom/35.1.0/firebase-bom-35.1.0.pom | grep -A1 -E 'firebase-(auth|firestore)</artifactId>' | grep -oE '<version>[^<]+'
+          curl -s https://dl.google.com/dl/android/maven2/com/google/firebase/firebase-auth/maven-metadata.xml | grep -oE '<latest>[^<]+'
 
       - name: Build APK
         env:
