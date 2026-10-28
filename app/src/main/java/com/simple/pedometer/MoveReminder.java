@@ -8,6 +8,8 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -44,9 +46,18 @@ public class MoveReminder extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         schedule(context);
         PendingResult pending = goAsync();
+        boolean[] finished = {false};
+        Runnable finish = () -> {
+            if (!finished[0]) {
+                finished[0] = true;
+                pending.finish();
+            }
+        };
         StepCounterReader.readOnce(context, () -> {
             remindIfInactive(context);
-            pending.finish();
+            // Share the new total with friends; give up after a few seconds if offline.
+            Friends.upload(context).addOnCompleteListener(t -> finish.run());
+            new Handler(Looper.getMainLooper()).postDelayed(finish, 8000);
         });
     }
 

@@ -2,6 +2,20 @@ plugins {
     id 'com.android.application'
 }
 
+// Firebase settings for sharing with friends, read from google-services.json
+// (downloaded from the Firebase console). Without the file, friends are off.
+def firebase = [apiKey: '', appId: '', projectId: '']
+def servicesFile = file('google-services.json')
+if (servicesFile.exists()) {
+    def json = new groovy.json.JsonSlurper().parse(servicesFile)
+    def client = json.client.find {
+        it.client_info.android_client_info.package_name == 'com.simple.pedometer'
+    } ?: json.client[0]
+    firebase.projectId = json.project_info.project_id
+    firebase.appId = client.client_info.mobilesdk_app_id
+    firebase.apiKey = client.api_key[0].current_key
+}
+
 android {
     namespace 'com.simple.pedometer'
     compileSdk 34
@@ -10,8 +24,16 @@ android {
         applicationId 'com.simple.pedometer'
         minSdk 26
         targetSdk 34
-        versionCode 10
-        versionName '1.9'
+        versionCode 11
+        versionName '2.0'
+
+        buildConfigField 'String', 'FIREBASE_API_KEY', "\"${firebase.apiKey}\""
+        buildConfigField 'String', 'FIREBASE_APP_ID', "\"${firebase.appId}\""
+        buildConfigField 'String', 'FIREBASE_PROJECT_ID', "\"${firebase.projectId}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     signingConfigs {
@@ -39,4 +61,7 @@ android {
 
 dependencies {
     implementation 'com.google.android.gms:play-services-location:21.3.0'
+    implementation platform('com.google.firebase:firebase-bom:33.1.2')
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
 }

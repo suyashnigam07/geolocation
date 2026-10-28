@@ -16,6 +16,8 @@ notification) while you are walking.
 - Hourly "time to move" reminder (10:00-21:00, under 250 steps in the past hour)
 - Heart rhythm check (60 s, camera): heart rate, HRV, regular/irregular estimate,
   pulse trace and beat-to-beat chart. Not an ECG and not a diagnosis.
+- Friends: share steps with up to 3 friends and see everyone ranked on the main screen
+  (mutual friend codes; pulse and heart data are never shared)
 - Light and dark mode
 - Pulse rate: tap the heart, cover the back camera and flash with your fingertip
   for ~20 seconds (an estimate, not a medical device)
@@ -42,6 +44,28 @@ time to see today's steps and the last 7 days.
 > Some phones (Xiaomi, Oppo, Vivo, Huawei, Samsung) have extra battery savers.
 > If counting stops, set the app's battery setting to **Unrestricted** / enable
 > **Autostart** in the phone's Settings → Apps → Pedometer.
+
+## Friends sharing setup (Firebase, one time)
+
+Sharing with friends needs a free Firebase project. Without it the app works
+normally and the Friends card says it isn't set up.
+
+1. Go to <https://console.firebase.google.com/> → **Create a project** (Google
+   Analytics is not needed).
+2. **Build → Authentication → Get started → Sign-in method → Anonymous → Enable.**
+3. **Build → Firestore Database → Create database** → choose a location near you →
+   start in **production mode**. Then open the **Rules** tab, replace everything with
+   the contents of [`firestore.rules`](firestore.rules) and click **Publish**.
+4. **Project settings (gear icon) → Your apps → Android icon**: package name
+   `com.simple.pedometer` → Register app → **Download google-services.json**.
+5. Add the file to the app, either way works:
+   - upload it to the `app/` folder of this repository (Firebase's config is not a
+     secret; the security rules protect the data), or
+   - add a repository secret named `GOOGLE_SERVICES_JSON` with the file's contents.
+6. A new APK is built automatically; install it on every phone.
+
+Each phone signs in anonymously; no email or password is needed. Reinstalling the
+app gives you a new friend code, so friends would need to add you again.
 
 ## Build it yourself
 

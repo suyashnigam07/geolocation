@@ -36,8 +36,6 @@ public class MainActivity extends Activity {
     private static final int REQUEST_PERMISSIONS = 1;
     private static final int DAILY_GOAL = 10000;
     private static final int ACTIVE_GOAL_MINUTES = 30;
-    /** Walking burns roughly 0.5 kcal per kg of body weight per km. */
-    private static final double KCAL_PER_KG_KM = 0.5;
     private static final DateTimeFormatter HEADER_FORMAT =
             DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault());
     private static final DateTimeFormatter DAY_FORMAT =
@@ -69,6 +67,7 @@ public class MainActivity extends Activity {
     private TextView pulseValue;
     private TextView pulseTime;
 
+    private FriendsSection friendsSection;
     private SensorManager sensorManager;
     private boolean canCount;
 
@@ -125,6 +124,7 @@ public class MainActivity extends Activity {
         reminderSwitch.setChecked(store.remindersEnabled());
         reminderSwitch.setOnCheckedChangeListener((b, checked) -> store.setRemindersEnabled(checked));
 
+        friendsSection = new FriendsSection(this);
         sensorManager = getSystemService(SensorManager.class);
         if (sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) == null) {
             status.setText("Sorry, this phone has no step counter sensor.");
@@ -143,6 +143,7 @@ public class MainActivity extends Activity {
                     SensorManager.SENSOR_DELAY_NORMAL);
         }
         refresh();
+        friendsSection.refresh();
     }
 
     @Override
@@ -221,8 +222,7 @@ public class MainActivity extends Activity {
         distance.setText(km < 1
                 ? String.format(Locale.getDefault(), "%d m", Math.round(km * 1000))
                 : String.format(Locale.getDefault(), "%.2f km", km));
-        calories.setText(String.format(Locale.getDefault(), "%d",
-                Math.round(km * store.getWeightKg() * KCAL_PER_KG_KM)));
+        calories.setText(numberFormat.format(store.caloriesFor(steps)));
         speed.setText(active > 0
                 ? String.format(Locale.getDefault(), "%.1f km/h",
                         store.getActiveSteps(today) * stride / 1000.0 / (active / 60.0))
@@ -266,6 +266,8 @@ public class MainActivity extends Activity {
             pulseHeart.setProgress(0);
             pulseTime.setText("Tap to measure");
         }
+
+        friendsSection.updateMe();
 
         PowerManager pm = getSystemService(PowerManager.class);
         batteryCard.setVisibility(pm.isIgnoringBatteryOptimizations(getPackageName())

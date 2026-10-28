@@ -134,6 +134,8 @@ public class StepService extends Service implements SensorEventListener {
 
     @Override
     public void onDestroy() {
+        // A walk just ended: share the new total with friends.
+        Friends.upload(this);
         handler.removeCallbacks(idleCheck);
         sensorManager.unregisterListener(this);
         listening = false;

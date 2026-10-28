@@ -138,6 +138,11 @@ public class StepStore {
         return getHeightCm() * 0.415 / 100.0;
     }
 
+    /** Walking burns roughly 0.5 kcal per kg of body weight per km. */
+    public int caloriesFor(int steps) {
+        return (int) Math.round(steps * getStrideMeters() / 1000.0 * getWeightKg() * 0.5);
+    }
+
     public boolean remindersEnabled() {
         return prefs.getBoolean(KEY_REMINDERS, true);
     }
