@@ -18,6 +18,15 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Show latest Firebase / Google Sign-In library versions
+        run: |
+          for a in com/google/gms/google-services com/google/firebase/firebase-bom \
+                   androidx/credentials/credentials androidx/credentials/credentials-play-services-auth \
+                   com/google/android/libraries/identity/googleid/googleid; do
+            v=$(curl -s https://dl.google.com/dl/android/maven2/$a/maven-metadata.xml | grep -oE '<(latest|release)>[^<]+' | head -2 | tr '\n' ' ')
+            echo "LATEST $a $v"
+          done
+
       - name: Build APK
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}

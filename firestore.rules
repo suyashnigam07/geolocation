@@ -1,27 +1,118 @@
 rules_version = '2';
 
-// Security rules for sharing steps with friends.
-// Paste these into Firebase console -> Firestore Database -> Rules -> Publish.
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: codes
+// Document ID: 6-character friend code (A-Z, 2-9), e.g. "K7P2QX"
+// Fields:
+//   - uid: string (required, immutable) - Firebase Auth uid of the code's owner
+//
+// Collection: users
+// Document ID: Firebase Auth uid of the owner
+// Fields:
+//   - name: string (required, 1-40 chars) - first name chosen in the app (no email or other PII)
+//   - code: string (required, 6 chars) - the owner's friend code; must be a code they claimed
+//   - readers: list<string> (required, max 3 uids) - friends allowed to read this document
+//   - days: map<string, number> (required, max 7 entries) - steps per date "YYYY-MM-DD"
+//   - date: string (required, "YYYY-MM-DD") - day that active/calories refer to
+//   - active: int (required, 0-1440) - active minutes on `date`
+//   - calories: int (required, 0-20000) - calories burned on `date`
+//   - updated: timestamp (required, server time of the write)
+//
+// Sharing is mutual: a person's document is readable only by themselves and
+// by the uids they put in `readers` (the friends whose codes they added).
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Friend code -> user id. Anyone signed in can look up a code;
-    // a code can be claimed once and never changed or taken over.
-    match /codes/{code} {
-      allow get: if request.auth != null;
-      allow create: if request.auth != null
-                    && request.resource.data.uid == request.auth.uid
-                    && code.size() == 6;
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // Each person's daily summary. Only they can write it, and only they
-    // and the friends they added (the "readers" list, at most 3) can read it.
-    match /users/{uid} {
-      allow read: if request.auth != null
-                  && (request.auth.uid == uid || request.auth.uid in resource.data.readers);
-      allow write: if request.auth != null
-                   && request.auth.uid == uid
-                   && request.resource.data.readers.size() <= 3;
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidUid(value) {
+      return value is string && value.size() > 0 && value.size() <= 128;
+    }
+
+    // Every entry of a list of at most 3 uids must be a valid uid.
+    function isValidReaders(readers) {
+      return readers is list && readers.size() <= 3
+        && (readers.size() < 1 || isValidUid(readers[0]))
+        && (readers.size() < 2 || isValidUid(readers[1]))
+        && (readers.size() < 3 || isValidUid(readers[2]));
+    }
+
+    function isValidCode(code) {
+      return code is string && code.matches('^[A-Z2-9]{6}$');
+    }
+
+    // The friend code in a user document must be one this user claimed.
+    function ownsCode(code) {
+      return isValidCode(code)
+        && exists(/databases/$(database)/documents/codes/$(code))
+        && get(/databases/$(database)/documents/codes/$(code)).data.uid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidCodeDoc(data) {
+      return hasOnlyAllowedFields(['uid']) && hasRequiredFields(['uid'])
+        && data.uid == request.auth.uid;
+    }
+
+    function isValidUserDoc(data) {
+      let fields = ['name', 'code', 'readers', 'days', 'date', 'active', 'calories', 'updated'];
+      return hasOnlyAllowedFields(fields) && hasRequiredFields(fields)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 40
+        && ownsCode(data.code)
+        && isValidReaders(data.readers)
+        && data.days is map && data.days.size() <= 7
+        && data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.active is int && data.active >= 0 && data.active <= 1440
+        && data.calories is int && data.calories >= 0 && data.calories <= 20000
+        && data.updated == request.time;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Friend code -> uid. Looking up a single code (to add a friend) needs
+    // sign-in; listing all codes is not allowed. A code can be claimed once
+    // and never changed, reassigned or deleted.
+    match /codes/{code} {
+      allow get: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidCode(code)
+                    && isValidCodeDoc(request.resource.data);
+    }
+
+    // Daily summary. Only the owner writes it, with a valid schema; only the
+    // owner and the friends they added can read it.
+    match /users/{userId} {
+      allow read: if isOwner(userId)
+                  || (isAuthenticated() && request.auth.uid in resource.data.readers);
+      allow create, update: if isOwner(userId) && isValidUserDoc(request.resource.data);
+      allow delete: if isOwner(userId);
     }
   }
 }

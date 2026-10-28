@@ -1,0 +1,19 @@
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-south1",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Friends Pedometer",
+        "supportEmail": "suyashnigam07@gmail.com",
+        "authorizedRedirectUris": [
+          "https://freindspedometer.firebaseapp.com/__/auth/handler"
+        ]
+      }
+    }
+  }
+}

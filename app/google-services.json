@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "199279981061",
+    "project_id": "freindspedometer",
+    "storage_bucket": "freindspedometer.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:199279981061:android:69d8a194d13d670666e26c",
+        "android_client_info": {
+          "package_name": "com.simple.pedometer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "199279981061-han5dumeed647m535aagll9d0slq86od.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.simple.pedometer",
+            "certificate_hash": "5eb379bd120f0b5983bd34f3170b41689f07f0cc"
+          }
+        },
+        {
+          "client_id": "199279981061-20gkr5nlq4u7v5qfao6bsf7e84vvtcso.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDfG25gCDlG1w3csyAGr8ic-ydJ7QGSejQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "199279981061-20gkr5nlq4u7v5qfao6bsf7e84vvtcso.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
