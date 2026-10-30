@@ -12,6 +12,8 @@ notification) while you are walking.
 - Bar chart of the last 7 days with total, average and best day
 - Calories burned next to the step ring
 - Time to walk 1,000 steps (last, best and average today; pauses excluded)
+- Add steps by hand for today or yesterday (walks without the phone)
+- Last 7 days of steps, km, calories and active minutes (chart + table)
 - Distance and walking speed (based on your height and weight)
 - Active minutes (minutes with 60+ steps) towards a 30 minute daily goal
 - Hourly "time to move" reminder (10:00-21:00, under 250 steps in the past hour)

@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Typeface;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -17,9 +18,13 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.InputType;
 import android.text.format.DateUtils;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -36,8 +41,18 @@ public class MainActivity extends Activity {
     private static final int REQUEST_PERMISSIONS = 1;
     private static final int DAILY_GOAL = 10000;
     private static final int ACTIVE_GOAL_MINUTES = 30;
+
+    // Measures the 7-day chart can show.
+    private static final int METRIC_STEPS = 0;
+    private static final int METRIC_KM = 1;
+    private static final int METRIC_KCAL = 2;
+    private static final int METRIC_ACTIVE = 3;
+    private static final int[] METRIC_TABS = {R.id.metric_steps, R.id.metric_km, R.id.metric_kcal, R.id.metric_active};
+    private static final String[] METRIC_TOTAL_LABELS = {"Total steps", "Total km", "Total kcal", "Total active min"};
     private static final DateTimeFormatter HEADER_FORMAT =
             DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault());
+    private static final DateTimeFormatter TABLE_DAY_FORMAT =
+            DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault());
     private static final DateTimeFormatter DAY_FORMAT =
             DateTimeFormatter.ofPattern("EEE", Locale.getDefault());
 
@@ -51,6 +66,9 @@ public class MainActivity extends Activity {
     private TextView blockBest;
     private TextView blockAverage;
     private TextView blockProgress;
+    private int metric = METRIC_STEPS;
+    private TextView weekTotalLabel;
+    private LinearLayout weekTable;
     private TextView weekTotal;
     private TextView weekAverage;
     private TextView weekBest;
@@ -106,6 +124,16 @@ public class MainActivity extends Activity {
         weekTotal = findViewById(R.id.week_total);
         weekAverage = findViewById(R.id.week_average);
         weekBest = findViewById(R.id.week_best);
+        weekTotalLabel = findViewById(R.id.week_total_label);
+        weekTable = findViewById(R.id.week_table);
+        for (int i = 0; i < METRIC_TABS.length; i++) {
+            int chosen = i;
+            findViewById(METRIC_TABS[i]).setOnClickListener(v -> {
+                metric = chosen;
+                refresh();
+            });
+        }
+        findViewById(R.id.add_steps).setOnClickListener(v -> addSteps());
         ring = findViewById(R.id.ring);
         chart = findViewById(R.id.chart);
         batteryCard = findViewById(R.id.battery_card);
@@ -246,22 +274,7 @@ public class MainActivity extends Activity {
         profile.setText(String.format(Locale.getDefault(),
                 "Based on %d cm, %d kg \u00B7 Edit", store.getHeightCm(), store.getWeightKg()));
 
-        // Last 7 days, oldest first, ending with today.
-        int[] values = new int[7];
-        String[] labels = new String[7];
-        int total = 0;
-        int best = 0;
-        for (int i = 0; i < 7; i++) {
-            LocalDate day = today.minusDays(6 - i);
-            values[i] = store.getSteps(day);
-            labels[i] = i == 6 ? "Today" : day.format(DAY_FORMAT);
-            total += values[i];
-            best = Math.max(best, values[i]);
-        }
-        chart.setData(values, labels, DAILY_GOAL);
-        weekTotal.setText(numberFormat.format(total));
-        weekAverage.setText(numberFormat.format(total / 7));
-        weekBest.setText(numberFormat.format(best));
+        refreshWeek(today);
 
         List<RhythmRecord> checks = new RhythmStore(this).getRecords();
         rhythmSummary.setText(checks.isEmpty()
@@ -288,6 +301,197 @@ public class MainActivity extends Activity {
         PowerManager pm = getSystemService(PowerManager.class);
         batteryCard.setVisibility(pm.isIgnoringBatteryOptimizations(getPackageName())
                 ? View.GONE : View.VISIBLE);
+    }
+
+    /** The 7-day chart for the chosen measure, its totals, and the day-by-day table. */
+    private void refreshWeek(LocalDate today) {
+        for (int i = 0; i < METRIC_TABS.length; i++) {
+            TextView tab = findViewById(METRIC_TABS[i]);
+            boolean selected = i == metric;
+            tab.setBackgroundResource(selected ? R.drawable.bg_chip : 0);
+            tab.setTextColor(getColor(selected ? R.color.accent : R.color.text_secondary));
+        }
+
+        // Oldest first, ending with today.
+        double[] values = new double[7];
+        String[] labels = new String[7];
+        double total = 0;
+        double best = 0;
+        for (int i = 0; i < 7; i++) {
+            LocalDate day = today.minusDays(6 - i);
+            values[i] = metricValue(day, metric);
+            labels[i] = i == 6 ? "Today" : day.format(DAY_FORMAT);
+            total += values[i];
+            best = Math.max(best, values[i]);
+        }
+        double goal;
+        java.util.function.DoubleFunction<String> barLabel;
+        switch (metric) {
+            case METRIC_KM:
+                goal = DAILY_GOAL * store.getStrideMeters() / 1000.0;
+                barLabel = v -> String.format(Locale.getDefault(), "%.1f", v);
+                break;
+            case METRIC_KCAL:
+                goal = store.caloriesFor(DAILY_GOAL);
+                barLabel = v -> String.valueOf(Math.round(v));
+                break;
+            case METRIC_ACTIVE:
+                goal = ACTIVE_GOAL_MINUTES;
+                barLabel = v -> String.valueOf(Math.round(v));
+                break;
+            default:
+                goal = DAILY_GOAL;
+                barLabel = null;
+        }
+        if (barLabel == null) {
+            int[] steps = new int[7];
+            for (int i = 0; i < 7; i++) steps[i] = (int) values[i];
+            chart.setData(steps, labels, DAILY_GOAL);
+        } else {
+            chart.setData(values, labels, goal, barLabel);
+        }
+        weekTotalLabel.setText(METRIC_TOTAL_LABELS[metric]);
+        weekTotal.setText(formatMetric(total, metric));
+        weekAverage.setText(formatMetric(total / 7, metric));
+        weekBest.setText(formatMetric(best, metric));
+
+        // Day-by-day table, newest first.
+        weekTable.removeAllViews();
+        weekTable.addView(tableRow(new String[]{"Day", "Steps", "Km", "kcal", "Active"}, true, false));
+        boolean anyManual = false;
+        for (int i = 0; i < 7; i++) {
+            LocalDate day = today.minusDays(i);
+            boolean manual = store.getManualSteps(day) > 0;
+            anyManual |= manual;
+            weekTable.addView(tableRow(new String[]{
+                    i == 0 ? "Today" : i == 1 ? "Yesterday" : day.format(TABLE_DAY_FORMAT),
+                    numberFormat.format(store.getSteps(day)) + (manual ? " \u270E" : ""),
+                    String.format(Locale.getDefault(), "%.2f", store.distanceKm(day)),
+                    numberFormat.format(store.caloriesFor(store.getSteps(day))),
+                    store.getActiveMinutes(day) + " min"}, false, i == 0));
+        }
+        if (anyManual) {
+            TextView note = new TextView(this);
+            note.setText("\u270E includes steps you added by hand");
+            note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            note.setTextColor(getColor(R.color.text_secondary));
+            note.setPadding(0, (int) (6 * getResources().getDisplayMetrics().density), 0, 0);
+            weekTable.addView(note);
+        }
+    }
+
+    private double metricValue(LocalDate day, int metric) {
+        switch (metric) {
+            case METRIC_KM: return store.distanceKm(day);
+            case METRIC_KCAL: return store.caloriesFor(store.getSteps(day));
+            case METRIC_ACTIVE: return store.getActiveMinutes(day);
+            default: return store.getSteps(day);
+        }
+    }
+
+    private String formatMetric(double value, int metric) {
+        if (metric == METRIC_KM) return String.format(Locale.getDefault(), "%.1f km", value);
+        String n = numberFormat.format(Math.round(value));
+        return metric == METRIC_KCAL ? n + " kcal" : metric == METRIC_ACTIVE ? n + " min" : n;
+    }
+
+    private View tableRow(String[] cells, boolean header, boolean highlight) {
+        float density = getResources().getDisplayMetrics().density;
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, (int) (6 * density), 0, (int) (6 * density));
+        float[] weights = {1.3f, 1.1f, 0.9f, 0.8f, 0.9f};
+        for (int i = 0; i < cells.length; i++) {
+            TextView cell = new TextView(this);
+            cell.setText(cells[i]);
+            cell.setTextSize(TypedValue.COMPLEX_UNIT_SP, header ? 12 : 14);
+            cell.setTextColor(getColor(header ? R.color.text_secondary : R.color.text_primary));
+            if (header || highlight) cell.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            cell.setGravity(i == 0 ? Gravity.START : Gravity.END);
+            row.addView(cell, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weights[i]));
+        }
+        if (!header) {
+            View line = new View(this);
+            line.setBackgroundColor(getColor(R.color.track));
+            LinearLayout wrapper = new LinearLayout(this);
+            wrapper.setOrientation(LinearLayout.VERTICAL);
+            wrapper.addView(line, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1));
+            wrapper.addView(row);
+            return wrapper;
+        }
+        return row;
+    }
+
+    /** Lets you add steps you walked without your phone, to today or yesterday. */
+    private void addSteps() {
+        float density = getResources().getDisplayMetrics().density;
+        LocalDate today = LocalDate.now();
+        RadioGroup days = new RadioGroup(this);
+        days.setOrientation(RadioGroup.HORIZONTAL);
+        RadioButton todayButton = new RadioButton(this);
+        todayButton.setText("Today");
+        todayButton.setId(View.generateViewId());
+        RadioButton yesterdayButton = new RadioButton(this);
+        yesterdayButton.setText("Yesterday");
+        yesterdayButton.setId(View.generateViewId());
+        days.addView(todayButton);
+        days.addView(yesterdayButton);
+        days.check(todayButton.getId());
+
+        EditText amount = new EditText(this);
+        amount.setInputType(InputType.TYPE_CLASS_NUMBER);
+        amount.setHint("Steps, e.g. 2500");
+
+        TextView already = new TextView(this);
+        already.setTextColor(getColor(R.color.text_secondary));
+        Runnable showAdded = () -> {
+            LocalDate day = days.getCheckedRadioButtonId() == todayButton.getId() ? today : today.minusDays(1);
+            int added = store.getManualSteps(day);
+            already.setText(added == 0 ? "" : "Already added by hand: " + numberFormat.format(added) + " steps");
+        };
+        days.setOnCheckedChangeListener((group, id) -> showAdded.run());
+        showAdded.run();
+
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (24 * density);
+        form.setPadding(pad, (int) (8 * density), pad, 0);
+        form.addView(days);
+        form.addView(amount);
+        form.addView(already);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Add steps")
+                .setMessage("For walks without your phone. Added steps count towards your total, "
+                        + "distance, calories and friends.")
+                .setView(form)
+                .setPositiveButton("Add", null)
+                .setNeutralButton("Remove added", null)
+                .setNegativeButton("Cancel", null)
+                .show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            LocalDate day = days.getCheckedRadioButtonId() == todayButton.getId() ? today : today.minusDays(1);
+            int steps = parse(amount, 0);
+            if (steps <= 0 || steps > StepStore.MAX_MANUAL_STEPS) {
+                amount.setError("Enter 1 to " + numberFormat.format(StepStore.MAX_MANUAL_STEPS));
+                return;
+            }
+            store.addManualSteps(day, steps);
+            Friends.upload(this);
+            Toast.makeText(this, "Added " + numberFormat.format(steps) + " steps", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+        });
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+            LocalDate day = days.getCheckedRadioButtonId() == todayButton.getId() ? today : today.minusDays(1);
+            if (store.getManualSteps(day) == 0) {
+                Toast.makeText(this, "No steps were added by hand for that day", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            store.clearManualSteps(day);
+            Friends.upload(this);
+            Toast.makeText(this, "Removed the steps added by hand", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+        });
     }
 
     private void editProfile() {

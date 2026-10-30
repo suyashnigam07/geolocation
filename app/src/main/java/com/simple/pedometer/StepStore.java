@@ -22,6 +22,9 @@ public class StepStore {
     private static final String KEY_LAST_COUNTER = "last_counter";
     private static final String KEY_LAST_DATE = "last_date";
     private static final String DAY_PREFIX = "day_";
+    /** Steps added by hand (walks without the phone), kept apart from counted steps. */
+    private static final String MANUAL_PREFIX = "manual_";
+    public static final int MAX_MANUAL_STEPS = 100_000;
 
     /** A minute with at least this many steps counts as an active minute. */
     public static final int ACTIVE_MINUTE_STEPS = 60;
@@ -79,7 +82,7 @@ public class StepStore {
                 .putString(KEY_LAST_DATE, today)
                 .putInt(key, (int) (prefs.getInt(key, 0) + delta))
                 .apply();
-        return prefs.getInt(DAY_PREFIX + today, 0);
+        return getSteps(LocalDate.now());
     }
 
     /**
@@ -166,7 +169,8 @@ public class StepStore {
      */
     public int takeStepsSinceLastHourMark() {
         String today = LocalDate.now().toString();
-        int total = getToday();
+        // Only steps the phone counted: adding steps by hand mustn't hide a reminder.
+        int total = prefs.getInt(DAY_PREFIX + today, 0);
         boolean sameDay = today.equals(prefs.getString(KEY_HOUR_MARK_DATE, ""));
         int steps = sameDay ? total - prefs.getInt(KEY_HOUR_MARK, 0) : -1;
         prefs.edit().putInt(KEY_HOUR_MARK, total).putString(KEY_HOUR_MARK_DATE, today).apply();
@@ -203,8 +207,28 @@ public class StepStore {
         prefs.edit().putBoolean(KEY_REMINDERS, enabled).apply();
     }
 
+    /** All steps for a day: counted by the phone plus any added by hand. */
     public int getSteps(LocalDate date) {
-        return prefs.getInt(DAY_PREFIX + date, 0);
+        return prefs.getInt(DAY_PREFIX + date, 0) + getManualSteps(date);
+    }
+
+    public int getManualSteps(LocalDate date) {
+        return prefs.getInt(MANUAL_PREFIX + date, 0);
+    }
+
+    /** Adds steps walked without the phone to a day (up to {@link #MAX_MANUAL_STEPS} in total). */
+    public void addManualSteps(LocalDate date, int steps) {
+        int total = Math.max(0, Math.min(MAX_MANUAL_STEPS, getManualSteps(date) + steps));
+        prefs.edit().putInt(MANUAL_PREFIX + date, total).apply();
+    }
+
+    public void clearManualSteps(LocalDate date) {
+        prefs.edit().remove(MANUAL_PREFIX + date).apply();
+    }
+
+    /** Kilometres walked on a day, from steps and stride length. */
+    public double distanceKm(LocalDate date) {
+        return getSteps(date) * getStrideMeters() / 1000.0;
     }
 
     public int getToday() {
